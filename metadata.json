@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Delivery Manager Pro - Gestão de Entregas & AI",
+  "description": "Uma plataforma avançada de gestão de logística com rastreamento de entregas, processamento de devoluções, analytics detalhados e ferramentas de IA generativa para marketing e suporte.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
