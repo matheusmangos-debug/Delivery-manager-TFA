@@ -3,50 +3,41 @@ import React, { useState } from 'react';
 import { ReturnReason, CustomerReputation, Branch, Driver, Vehicle, ClientMapping } from '../types';
 
 interface SettingsProps {
-  reasons: ReturnReason[]; onUpdateReasons: (reasons: ReturnReason[]) => void;
-  customerDatabase: CustomerReputation[]; onUpdateCustomerDatabase: (db: CustomerReputation[]) => void;
-  branches: Branch[]; onUpdateBranches: (branches: Branch[]) => void;
-  drivers: Driver[]; onUpdateDrivers: (drivers: Driver[]) => void;
-  vehicles: Vehicle[]; onUpdateVehicles: (vehicles: Vehicle[]) => void;
-  clientMappings: ClientMapping[]; onUpdateClientMappings: (mappings: ClientMapping[]) => void;
+  reasons: ReturnReason[]; onAddReason: (r: ReturnReason) => void; onRemoveReason: (id: string) => void;
+  customerDatabase: CustomerReputation[]; onAddCritical: (c: CustomerReputation) => void; onRemoveCritical: (id: string) => void;
+  branches: Branch[]; onAddBranch: (b: Branch) => void; onRemoveBranch: (id: string) => void;
+  drivers: Driver[]; onAddDriver: (d: Driver) => void; onRemoveDriver: (id: string) => void;
+  vehicles: Vehicle[]; onAddVehicle: (v: Vehicle) => void; onRemoveVehicle: (id: string) => void;
+  clientMappings: ClientMapping[]; onAddMapping: (m: ClientMapping) => void; onBulkAddMappings: (ms: ClientMapping[]) => void; onRemoveMapping: (id: string) => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
-  reasons, onUpdateReasons, customerDatabase, onUpdateCustomerDatabase,
-  branches, onUpdateBranches, drivers, onUpdateDrivers, vehicles, onUpdateVehicles,
-  clientMappings, onUpdateClientMappings
+  reasons, onAddReason, onRemoveReason,
+  customerDatabase, onAddCritical, onRemoveCritical,
+  branches, onAddBranch, onRemoveBranch,
+  drivers, onAddDriver, onRemoveDriver,
+  vehicles, onAddVehicle, onRemoveVehicle,
+  clientMappings, onAddMapping, onBulkAddMappings, onRemoveMapping
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'reasons' | 'critical-base' | 'branches' | 'vehicles' | 'drivers' | 'mappings'>('reasons');
   const [mappingMode, setMappingMode] = useState<'individual' | 'bulk'>('individual');
   const [temp, setTemp] = useState<any>({});
 
-  const addItem = (list: any[], setFn: any, item: any) => { 
-    if (!item) return;
-    setFn([...list, item]); 
-    setTemp({}); 
-  };
-  
   const handleBulkMappings = () => {
     if (!temp.bulkText?.trim()) return;
     const lines = temp.bulkText.split('\n').filter((l: string) => l.trim());
     const newMappings = lines.map((line: string) => {
       const parts = line.split('\t').length > 1 ? line.split('\t') : line.split(';');
       return {
-        customerId: parts[0]?.trim() || 'MAT-000',
-        customerName: 'N/I',
-        sellerCode: parts[1]?.trim() || 'VD-00',
-        sellerName: parts[2]?.trim() || 'Vendedor Manual',
-        sellerPhone: parts[3]?.trim() || ''
+        customerId: parts[0]?.trim() || `MAT-${Math.floor(Math.random() * 90000)}`,
+        customerName: parts[1]?.trim() || 'N/I',
+        sellerCode: parts[2]?.trim() || 'VD-00',
+        sellerName: parts[3]?.trim() || 'Vendedor Manual',
+        sellerPhone: parts[4]?.trim() || ''
       };
     });
-    onUpdateClientMappings([...clientMappings, ...newMappings]);
+    onBulkAddMappings(newMappings);
     setTemp({});
-  };
-
-  const removeItem = (id: string, list: any[], setFn: any, key: string = 'id') => {
-    if (window.confirm("Remover este registro permanentemente?")) {
-      setFn(list.filter((i: any) => i[key] !== id));
-    }
   };
 
   const tabs = [
@@ -77,14 +68,14 @@ const Settings: React.FC<SettingsProps> = ({
               <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Novo Motivo Operacional</h3>
               <div className="flex gap-4">
                 <input placeholder="Ex: Cliente ausente" value={temp.reasonLabel || ''} onChange={e => setTemp({...temp, reasonLabel: e.target.value})} className="flex-1 p-4 rounded-2xl border font-bold text-sm bg-white" />
-                <button onClick={() => addItem(reasons, onUpdateReasons, {id: `REAS-${Date.now()}`, label: temp.reasonLabel, color: '#4f46e5', isActive: true})} disabled={!temp.reasonLabel} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
+                <button onClick={() => { onAddReason({id: `REAS-${Date.now()}`, label: temp.reasonLabel, color: '#4f46e5', isActive: true}); setTemp({}); }} disabled={!temp.reasonLabel} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               {reasons.map(r => (
                 <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200">
                   <span className="font-black uppercase text-xs text-slate-700 tracking-tight">{r.label}</span>
-                  <button onClick={() => removeItem(r.id, reasons, onUpdateReasons)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveReason(r.id); }} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
@@ -112,7 +103,7 @@ const Settings: React.FC<SettingsProps> = ({
                 </select>
               </div>
               <div className="col-span-3"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Notas Críticas</label><input value={temp.cnotes || ''} onChange={e => setTemp({...temp, cnotes: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white" placeholder="Ex: Cliente recusa descarga sem ajudante" /></div>
-              <button onClick={() => addItem(customerDatabase, onUpdateCustomerDatabase, {customerId: temp.cid, status: temp.cstatus || 'Retorno', notes: temp.cnotes, riskLevel: temp.crisk || 'medium', returnCount: 0, complaintCount: 0, resolutionStatus: 'Pendente', registrationDate: new Date().toLocaleDateString('pt-BR')})} className="col-span-3 h-14 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:bg-rose-700 transition-all">Salvar Cliente Crítico</button>
+              <button onClick={() => { onAddCritical({customerId: temp.cid, status: temp.cstatus || 'Retorno', notes: temp.cnotes, riskLevel: temp.crisk || 'medium', returnCount: 0, complaintCount: 0, resolutionStatus: 'Pendente', registrationDate: new Date().toLocaleDateString('pt-BR')}); setTemp({}); }} className="col-span-3 h-14 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:bg-rose-700 transition-all">Salvar Cliente Crítico</button>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {customerDatabase.map(c => (
@@ -126,7 +117,7 @@ const Settings: React.FC<SettingsProps> = ({
                   </div>
                   <div className="mt-4 flex justify-between items-center border-t pt-4">
                     <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{c.registrationDate}</span>
-                    <button onClick={() => removeItem(c.customerId, customerDatabase, onUpdateCustomerDatabase, 'customerId')} className="text-rose-300 hover:text-rose-600"><i className="fas fa-trash-can"></i></button>
+                    <button onClick={() => { if(window.confirm("Remover?")) onRemoveCritical(c.customerId); }} className="text-rose-300 hover:text-rose-600"><i className="fas fa-trash-can"></i></button>
                   </div>
                 </div>
               ))}
@@ -138,18 +129,8 @@ const Settings: React.FC<SettingsProps> = ({
         {activeSubTab === 'mappings' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex items-center gap-4 mb-2">
-              <button 
-                onClick={() => setMappingMode('individual')}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'individual' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-              >
-                Inserir Manual
-              </button>
-              <button 
-                onClick={() => setMappingMode('bulk')}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'bulk' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-              >
-                Inserir Manual em Massa
-              </button>
+              <button onClick={() => setMappingMode('individual')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'individual' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Manual</button>
+              <button onClick={() => setMappingMode('bulk')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'bulk' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Massa (Planilha)</button>
             </div>
 
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner">
@@ -159,20 +140,15 @@ const Settings: React.FC<SettingsProps> = ({
                   <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Cód. Vendedor</label><input value={temp.scode || ''} onChange={e => setTemp({...temp, scode: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white uppercase" /></div>
                   <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">WhatsApp Vendedor</label><input value={temp.sphone || ''} onChange={e => setTemp({...temp, sphone: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white" placeholder="5511..." /></div>
                   <div className="col-span-3"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome do Vendedor</label><input value={temp.sname || ''} onChange={e => setTemp({...temp, sname: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-sm bg-white" /></div>
-                  <button onClick={() => addItem(clientMappings, onUpdateClientMappings, {customerId: temp.cid, sellerCode: temp.scode, sellerName: temp.sname, sellerPhone: temp.sphone, customerName: 'N/I'})} className="col-span-3 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Vincular Vendedor</button>
+                  <button onClick={() => { onAddMapping({customerId: temp.cid, sellerCode: temp.scode, sellerName: temp.sname, sellerPhone: temp.sphone, customerName: 'N/I'}); setTemp({}); }} className="col-span-3 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Vincular Vendedor</button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Entrada de Dados (Copia e Cola da Planilha)</label>
-                    <span className="text-[9px] font-bold text-indigo-400">Layout: MATRÍCULA ; CÓD.VENDEDOR ; NOME ; WHATSAPP</span>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Layout de Planilha (Copiar e Colar)</label>
+                    <span className="text-[9px] font-bold text-indigo-400">MATRÍCULA ; NOME_CLIENTE ; CÓD.VENDEDOR ; NOME_VENDEDOR ; WHATSAPP</span>
                   </div>
-                  <textarea 
-                    value={temp.bulkText || ''} 
-                    onChange={e => setTemp({...temp, bulkText: e.target.value})} 
-                    className="w-full h-48 p-4 rounded-2xl border font-mono text-xs bg-white resize-none" 
-                    placeholder="MAT-101 ; VD-01 ; João Silva ; 5511999999999&#10;MAT-102 ; VD-02 ; Maria Souza ; 5511888888888"
-                  />
+                  <textarea value={temp.bulkText || ''} onChange={e => setTemp({...temp, bulkText: e.target.value})} className="w-full h-48 p-4 rounded-2xl border font-mono text-xs bg-white resize-none" placeholder="MAT-101 ; João Silva ; VD-01 ; Pedro Rocha ; 5511999999999" />
                   <button onClick={handleBulkMappings} className="w-full h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Processar Inserção em Massa</button>
                 </div>
               )}
@@ -186,7 +162,7 @@ const Settings: React.FC<SettingsProps> = ({
                     <p className="font-bold text-slate-800 uppercase text-xs mt-1">{m.sellerName}</p>
                     <p className="text-[9px] font-black text-emerald-500 mt-1">{m.sellerPhone}</p>
                   </div>
-                  <button onClick={() => removeItem(m.customerId, clientMappings, onUpdateClientMappings, 'customerId')} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveMapping(m.customerId); }} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
@@ -201,7 +177,7 @@ const Settings: React.FC<SettingsProps> = ({
                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome da Filial</label>
                  <input value={temp.bname || ''} onChange={e => setTemp({...temp, bname: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-sm bg-white" placeholder="Ex: Filial Curitiba" />
                </div>
-               <button onClick={() => addItem(branches, onUpdateBranches, {id: `B-${Date.now()}`, name: temp.bname, location: 'BR'})} disabled={!temp.bname} className="h-14 px-8 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
+               <button onClick={() => { onAddBranch({id: `B-${Date.now()}`, name: temp.bname, location: 'BR'}); setTemp({}); }} disabled={!temp.bname} className="h-14 px-8 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
             </div>
             <div className="grid grid-cols-2 gap-4">
               {branches.map(b => (
@@ -210,7 +186,7 @@ const Settings: React.FC<SettingsProps> = ({
                     <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black"><i className="fas fa-building text-xs"></i></div>
                     <span className="font-black uppercase text-xs text-slate-800">{b.name}</span>
                   </div>
-                  <button onClick={() => removeItem(b.id, branches, onUpdateBranches)} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveBranch(b.id); }} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
@@ -228,7 +204,7 @@ const Settings: React.FC<SettingsProps> = ({
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
-              <button onClick={() => addItem(vehicles, onUpdateVehicles, {id: `V-${Date.now()}`, plate: temp.vplate, branchId: temp.vbranch, model: 'Logística', capacity: 'G'})} className="col-span-2 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar Veículo</button>
+              <button onClick={() => { onAddVehicle({id: `V-${Date.now()}`, plate: temp.vplate, branchId: temp.vbranch, model: 'Logística', capacity: 'G'}); setTemp({}); }} className="col-span-2 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar Veículo</button>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {vehicles.map(v => (
@@ -237,7 +213,7 @@ const Settings: React.FC<SettingsProps> = ({
                     <p className="font-black text-slate-800 uppercase text-xs">{v.plate}</p>
                     <p className="text-[9px] font-black text-indigo-500 uppercase mt-1">{branches.find(b => b.id === v.branchId)?.name || 'N/I'}</p>
                   </div>
-                  <button onClick={() => removeItem(v.id, vehicles, onUpdateVehicles)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveVehicle(v.id); }} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
@@ -255,7 +231,7 @@ const Settings: React.FC<SettingsProps> = ({
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
-              <button onClick={() => addItem(drivers, onUpdateDrivers, {id: `DRV-${Date.now()}`, name: temp.dname, branchId: temp.dbranch, status: 'Ativo', licenseType: 'D'})} className="col-span-2 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Registrar Motorista</button>
+              <button onClick={() => { onAddDriver({id: `DRV-${Date.now()}`, name: temp.dname, branchId: temp.dbranch, status: 'Ativo', licenseType: 'D'}); setTemp({}); }} className="col-span-2 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Registrar Motorista</button>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {drivers.map(d => (
@@ -267,7 +243,7 @@ const Settings: React.FC<SettingsProps> = ({
                       <p className="text-[9px] font-black text-slate-400 uppercase mt-1">{branches.find(b => b.id === d.branchId)?.name || 'N/I'}</p>
                     </div>
                   </div>
-                  <button onClick={() => removeItem(d.id, drivers, onUpdateDrivers)} className="text-slate-200 hover:text-rose-500 p-2 opacity-0 group-hover:opacity-100"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveDriver(d.id); }} className="text-slate-200 hover:text-rose-500 p-2 opacity-0 group-hover:opacity-100"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>

@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Delivery, DeliveryStatus, ReturnReason, CustomerReputation, ClientMapping } from '../types';
+import { GeminiService } from '../services/geminiService';
 
 interface DeliveryListProps {
   selectedBranch: string;
@@ -25,8 +26,9 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
   
   // Modal states
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importMode, setImportMode] = useState<'bulk' | 'individual'>('bulk');
+  const [importMode, setImportMode] = useState<'bulk' | 'individual' | 'ai'>('ai');
   const [importText, setImportText] = useState('');
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
   
   // Edit & Individual Form states
   const [editTarget, setEditTarget] = useState<Delivery | null>(null);
@@ -54,6 +56,33 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
       return matchesBranch && matchesStatus && matchesSearch && matchesCritical;
     });
   }, [deliveries, selectedBranch, filter, search, onlyCritical, customerHistory]);
+
+  const handleAiImport = async () => {
+    if (!importText.trim()) return;
+    setIsAiProcessing(true);
+    try {
+      const extractedData = await GeminiService.parseSpreadsheetText(importText);
+      if (extractedData && extractedData.length > 0) {
+        const formatted = extractedData.map((item: any) => ({
+          ...item,
+          id: `D-${Math.random().toString(36).substr(2, 9)}`,
+          status: DeliveryStatus.PENDING,
+          branch: selectedBranch === 'all' ? 'sp-01' : selectedBranch,
+          date: item.date || new Date().toLocaleDateString('pt-BR')
+        }));
+        onAddDeliveries(formatted);
+        setShowImportModal(false);
+        setImportText('');
+      } else {
+        alert("A IA não conseguiu identificar dados válidos no texto.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao processar com IA.");
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
 
   const handleManualImport = () => {
     if (importMode === 'bulk') {
@@ -231,19 +260,33 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-6 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-4">
               <div className="flex gap-6">
+                <button onClick={() => setImportMode('ai')} className={`text-xs font-black uppercase border-b-2 pb-2 transition-all tracking-widest ${importMode === 'ai' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400'}`}>IA Smart Import</button>
                 <button onClick={() => setImportMode('bulk')} className={`text-xs font-black uppercase border-b-2 pb-2 transition-all tracking-widest ${importMode === 'bulk' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>Em Massa</button>
                 <button onClick={() => setImportMode('individual')} className={`text-xs font-black uppercase border-b-2 pb-2 transition-all tracking-widest ${importMode === 'individual' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>Individual</button>
               </div>
               <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times text-xl"></i></button>
             </div>
             
-            {importMode === 'bulk' ? (
+            {importMode === 'ai' ? (
+              <div className="space-y-4">
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center gap-3">
+                   <i className="fas fa-robot text-emerald-600 text-xl"></i>
+                   <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Cole qualquer texto bagunçado abaixo. A IA Gemini irá organizar as colunas automaticamente para o banco de dados.</p>
+                </div>
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none focus:ring-4 focus:ring-emerald-500/10" placeholder="Cole aqui os dados copiados de planilhas ou textos..." />
+                <button onClick={handleAiImport} disabled={isAiProcessing || !importText} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all">
+                  {isAiProcessing ? <i className="fas fa-spinner animate-spin"></i> : <i className="fas fa-wand-magic-sparkles"></i>}
+                  {isAiProcessing ? 'Processando Inteligência...' : 'Extrair e Salvar no Supabase'}
+                </button>
+              </div>
+            ) : importMode === 'bulk' ? (
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
                   <span>Layout de Colunas</span>
                   <span className="text-indigo-500">Matrícula ; Cliente ; Motorista ; Volumes ; Data</span>
                 </div>
                 <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none" placeholder="MAT-101 ; João Silva ; Márcio ; 10 ; 22/10/2023" />
+                <button onClick={handleManualImport} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Processar Manual</button>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-6">
@@ -252,13 +295,9 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
                 <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome do Cliente</label><input value={individualForm.customerName} onChange={e => setIndividualForm({...individualForm, customerName: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm uppercase bg-slate-50" /></div>
                 <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Motorista</label><input value={individualForm.driverName} onChange={e => setIndividualForm({...individualForm, driverName: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm uppercase bg-slate-50" /></div>
                 <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Data</label><input value={individualForm.date} onChange={e => setIndividualForm({...individualForm, date: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-slate-50" /></div>
+                <button onClick={handleManualImport} className="col-span-2 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Salvar Registro</button>
               </div>
             )}
-            
-            <div className="flex gap-4 pt-4">
-              <button onClick={() => setShowImportModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest">Cancelar</button>
-              <button onClick={handleManualImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Salvar Dados</button>
-            </div>
           </div>
         </div>
       )}
