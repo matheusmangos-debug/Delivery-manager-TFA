@@ -54,32 +54,27 @@ const App: React.FC = () => {
 
     const sanitized: any = {};
     allowed.forEach(col => {
-      if (data[col] !== undefined) {
+      if (data[col] !== undefined && data[col] !== null) {
         let value = data[col];
         if (col === 'date' && typeof value === 'string' && value.includes('/')) {
           const [d, m, y] = value.split('/');
           value = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
         }
-        if (col === 'boxQuantity' || col === 'returnCount' || col === 'complaintCount') {
-          const num = parseInt(String(value), 10);
-          value = isNaN(num) ? 0 : num;
+        if (['boxQuantity', 'returnCount', 'complaintCount'].includes(col)) {
+          value = parseInt(String(value), 10) || 0;
         }
-        if (col === 'items' && Array.isArray(value)) value = value.join(', ');
+        if (col === 'items' && Array.isArray(value)) {
+          value = value.join(', ');
+        }
         sanitized[col] = value;
       }
     });
-
-    if (table === 'deliveries' && !isUpdate) {
-      sanitized.customerId = sanitized.customerId || 'N/I';
-      sanitized.date = sanitized.date || new Date().toISOString().split('T')[0];
-    }
-
     return sanitized;
   };
 
   const fetchAllData = async () => {
     if (!isSupabaseConfigured) { setDbStatus('offline'); return; }
-    if (dbStatus === 'offline') setDbStatus('connecting');
+    setDbStatus('connecting');
     
     try {
       const results = await Promise.allSettled([
@@ -95,24 +90,25 @@ const App: React.FC = () => {
 
       const data: any[] = [];
       let hasError = false;
+      
       results.forEach((res, idx) => {
-        if (res.status === 'fulfilled' && !res.value.error) { data[idx] = res.value.data; } 
-        else { hasError = true; }
+        if (res.status === 'fulfilled' && !res.value.error) {
+          data[idx] = res.value.data;
+        } else {
+          hasError = true;
+        }
       });
 
-      if (!hasError) {
-        setDeliveries((data[0] || []).map((d: any) => ({ ...d, items: d.items ? d.items.split(',').map((i: string) => i.trim()) : [] })));
-        if (data[1]) setBranches(data[1]);
-        if (data[2]) setReasons(data[2]);
-        if (data[3]) setDrivers(data[3]);
-        if (data[4]) setVehicles(data[4]);
-        if (data[5]) setCustomerDatabase(data[5]);
-        if (data[6]) setClientMappings(data[6]);
-        if (data[7]) setUsers(data[7]);
-        setDbStatus('online');
-      } else { 
-        setDbStatus('offline'); 
-      }
+      if (data[0]) setDeliveries(data[0].map((d: any) => ({ ...d, items: d.items ? String(d.items).split(',').map((i: string) => i.trim()) : [] })));
+      if (data[1]) setBranches(data[1]);
+      if (data[2]) setReasons(data[2]);
+      if (data[3]) setDrivers(data[3]);
+      if (data[4]) setVehicles(data[4]);
+      if (data[5]) setCustomerDatabase(data[5]);
+      if (data[6]) setClientMappings(data[6]);
+      if (data[7]) setUsers(data[7]);
+      
+      setDbStatus(hasError ? 'offline' : 'online');
     } catch (err) { 
       setDbStatus('offline'); 
     }
@@ -125,21 +121,15 @@ const App: React.FC = () => {
     
     fetchAllData();
 
-    const channel = supabase
-      .channel('swiftlog-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => fetchAllData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => fetchAllData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_reputation' }, () => fetchAllData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_mappings' }, () => fetchAllData())
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Realtime sincronizado');
-        }
-      });
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel('swiftlog-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => fetchAllData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => fetchAllData())
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => { supabase.removeChannel(channel); };
+    }
   }, []);
 
   const filteredDeliveries = useMemo(() => {
@@ -181,27 +171,21 @@ const App: React.FC = () => {
     if (dbStatus === 'online') {
       const { data, error } = await db.deliveries().insert(toInsert).select();
       if (!error && data) {
-        const formattedData = data.map(d => ({ ...d, items: d.items ? d.items.split(',').map((i: string) => i.trim()) : [] }));
+        const formattedData = data.map(d => ({ ...d, items: d.items ? String(d.items).split(',').map((i: string) => i.trim()) : [] }));
         setDeliveries(prev => [...formattedData, ...prev]);
-      } else if (error) { alert(`Erro: ${error.message}`); }
+      } else if (error) { alert(`Erro: ${error.message}. Verifique as chaves do Supabase.`); }
     } else { setDeliveries(prev => [...newOnes.map(n => ({...n, id: crypto.randomUUID(), date: today})), ...prev]); }
   };
 
   const addMapping = async (mapping: ClientMapping) => {
     const clean = sanitizeForDb(mapping, 'mappings');
-    if (dbStatus === 'online') {
-      const { error } = await db.mappings().insert([clean]);
-      if (error) { alert("Erro: " + error.message); return; }
-    }
+    if (dbStatus === 'online') await db.mappings().insert([clean]);
     setClientMappings(prev => [...prev, mapping]);
   };
 
   const bulkAddMappings = async (mappings: ClientMapping[]) => {
     const cleanMappings = mappings.map(m => sanitizeForDb(m, 'mappings'));
-    if (dbStatus === 'online') {
-      const { error } = await db.mappings().insert(cleanMappings);
-      if (error) { alert("Erro: " + error.message); return; }
-    }
+    if (dbStatus === 'online') await db.mappings().insert(cleanMappings);
     setClientMappings(prev => [...prev, ...mappings]);
   };
 
@@ -240,7 +224,7 @@ const App: React.FC = () => {
   return (
     <Layout user={currentUser} activeTab={activeTab} dbStatus={dbStatus} onTabChange={setActiveTab} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} filterRange={filterRange} onFilterRangeChange={setFilterRange} customDate={customDate} onCustomDateChange={setCustomDate} branches={branches} onLogout={() => { setCurrentUser(null); localStorage.removeItem('swiftlog_current_session'); }} onRefresh={fetchAllData}>
       {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
-      {activeTab === 'deliveries' && <DeliveryList selectedBranch={selectedBranch} deliveries={filteredDeliveries} onUpdate={updateDelivery} onBulkUpdate={async (ids, status) => { if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); }} onBulkUpdateDate={async (ids, date) => { const deliveryDay = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' }); if (dbStatus === 'online') await db.deliveries().update({ date, deliveryDay }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, date, deliveryDay } : d)); }} onDeleteDeliveries={async ids => { if(dbStatus==='online') await db.deliveries().delete().in('id', ids); setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); }} onAddDeliveries={addDeliveries} returnReasons={reasons} customerHistory={customerDatabase} clientMappings={clientMappings} />}
+      {activeTab === 'deliveries' && <DeliveryList selectedBranch={selectedBranch} deliveries={filteredDeliveries} onUpdate={updateDelivery} onBulkUpdate={async (ids, status) => { if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); }} onDeleteDeliveries={async ids => { if(dbStatus==='online') await db.deliveries().delete().in('id', ids); setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); }} onAddDeliveries={addDeliveries} returnReasons={reasons} customerHistory={customerDatabase} clientMappings={clientMappings} />}
       {activeTab === 'critical-clients' && <CriticalClients deliveries={deliveries} customerHistory={customerDatabase} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={bulkAddMappings} selectedBranch={selectedBranch} filterDate={customDate} onUpdateClient={async (cid, upds) => { if (dbStatus === 'online') await db.critical_base().update(sanitizeForDb(upds, 'critical_base', true)).eq('customerId', cid); setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c)); }} />}
       {activeTab === 'team' && <TeamPerformance selectedBranch={selectedBranch} deliveries={filteredDeliveries} drivers={drivers} onBulkUpdateStatus={async (ids, s) => { if (dbStatus === 'online') await db.drivers().update({ manualStatus: s }).in('id', ids); setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d)); }} />}
       {activeTab === 'returns' && <ReturnPortal selectedBranch={selectedBranch} deliveries={filteredDeliveries} clientMappings={clientMappings} />}

@@ -335,24 +335,42 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
                    <i className="fas fa-file-pdf text-rose-600 text-xl"></i>
                    <p className="text-[10px] font-bold text-rose-700 uppercase tracking-widest">Selecione um PDF. Os dados serão extraídos automaticamente para a data de hoje.</p>
                 </div>
-                <div className="border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center hover:border-rose-300 transition-all cursor-pointer bg-slate-50" onClick={() => document.getElementById('pdfInput')?.click()}>
+                <div 
+                  className={`border-2 rounded-3xl p-12 text-center transition-all cursor-pointer flex flex-col items-center justify-center animate-in fade-in duration-500 ${
+                    pdfFile 
+                      ? 'border-solid border-rose-500 bg-rose-50 shadow-inner' 
+                      : 'border-dashed border-slate-200 bg-slate-50 hover:border-rose-300'
+                  }`} 
+                  onClick={() => document.getElementById('pdfInput')?.click()}
+                >
                   {pdfFile ? (
-                    <div className="flex flex-col items-center">
-                      <i className="fas fa-file-pdf text-4xl text-rose-500 mb-2"></i>
-                      <p className="text-sm font-black text-slate-800 uppercase">{pdfFile.name}</p>
-                      <button onClick={(e) => { e.stopPropagation(); setPdfFile(null); }} className="text-[10px] text-rose-500 font-bold uppercase mt-2">Remover Arquivo</button>
+                    <div className="flex flex-col items-center animate-in zoom-in-90">
+                      <div className="w-16 h-16 bg-rose-600 rounded-2xl flex items-center justify-center text-white text-3xl shadow-lg mb-4">
+                        <i className="fas fa-file-pdf"></i>
+                      </div>
+                      <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{pdfFile.name}</p>
+                      <p className="text-[9px] font-bold text-rose-500 uppercase mt-1">Pronto para processamento</p>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setPdfFile(null); }} 
+                        className="mt-4 px-4 py-2 bg-white border border-rose-200 text-rose-500 text-[10px] font-black uppercase rounded-xl hover:bg-rose-100 transition-colors shadow-sm"
+                      >
+                        Trocar Arquivo
+                      </button>
                     </div>
                   ) : (
                     <>
-                      <i className="fas fa-cloud-upload-alt text-4xl text-slate-300 mb-2"></i>
-                      <p className="text-sm font-bold text-slate-500 uppercase">Clique para selecionar PDF</p>
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300 text-3xl mb-4">
+                        <i className="fas fa-cloud-upload-alt"></i>
+                      </div>
+                      <p className="text-sm font-black text-slate-500 uppercase tracking-tight">Clique para selecionar PDF</p>
+                      <p className="text-[10px] font-bold text-slate-400 mt-1">Arquivos até 10MB suportados</p>
                     </>
                   )}
                   <input type="file" id="pdfInput" hidden accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] || null)} />
                 </div>
-                <button onClick={handlePdfImport} disabled={isAiProcessing || !pdfFile} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3">
+                <button onClick={handlePdfImport} disabled={isAiProcessing || !pdfFile} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3 disabled:opacity-30 disabled:grayscale transition-all">
                   {isAiProcessing ? <i className="fas fa-spinner animate-spin"></i> : <i className="fas fa-robot"></i>}
-                  {isAiProcessing ? 'Lendo Documento...' : 'Importar Lista do PDF'}
+                  {isAiProcessing ? 'Lendo Documento...' : 'Extrair Dados do PDF'}
                 </button>
               </div>
             )}

@@ -24,9 +24,10 @@ const Settings: React.FC<SettingsProps> = ({
   const [temp, setTemp] = useState<any>({ cstatus: 'Retorno', crisk: 'low' });
 
   const SQL_SCHEMA = `
--- SQL DE EMERGÊNCIA - SWIFTLOG PRO
--- Execute no SQL Editor do Supabase se houver erros 400
+-- SQL COMPLETO - SWIFTLOG PRO
+-- Execute no SQL Editor do Supabase para criar as tabelas e liberar acesso
 
+-- 1. TABELA DE ENTREGAS
 CREATE TABLE IF NOT EXISTS deliveries (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   "customerId" text NOT NULL,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   created_at timestamptz DEFAULT now()
 );
 
+-- 2. TABELA DE REPUTAÇÃO / CLIENTES CRÍTICOS
 CREATE TABLE IF NOT EXISTS customer_reputation (
   "customerId" text PRIMARY KEY,
   "returnCount" integer DEFAULT 0,
@@ -56,6 +58,7 @@ CREATE TABLE IF NOT EXISTS customer_reputation (
   "registrationDate" text
 );
 
+-- 3. TABELA DE VEÍCULOS
 CREATE TABLE IF NOT EXISTS vehicles (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   plate text UNIQUE,
@@ -65,6 +68,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
   "driverId" text
 );
 
+-- 4. TABELA DE MOTORISTAS
 CREATE TABLE IF NOT EXISTS drivers (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text,
@@ -73,12 +77,14 @@ CREATE TABLE IF NOT EXISTS drivers (
   "manualStatus" text
 );
 
+-- 5. TABELA DE FILIAIS
 CREATE TABLE IF NOT EXISTS branches (
   id text PRIMARY KEY,
   name text,
   location text
 );
 
+-- 6. MOTIVOS DE RETORNO
 CREATE TABLE IF NOT EXISTS return_reasons (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   label text,
@@ -86,6 +92,7 @@ CREATE TABLE IF NOT EXISTS return_reasons (
   "isActive" boolean DEFAULT true
 );
 
+-- 7. MAPEAMENTO CLIENTE X VENDEDOR
 CREATE TABLE IF NOT EXISTS client_mappings (
   "customerId" text PRIMARY KEY,
   "sellerName" text,
@@ -93,6 +100,27 @@ CREATE TABLE IF NOT EXISTS client_mappings (
   "sellerPhone" text,
   "customerName" text
 );
+
+-- 8. TABELA DE USUÁRIOS DO SISTEMA
+CREATE TABLE IF NOT EXISTS users (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text,
+  email text UNIQUE,
+  password text,
+  role text,
+  avatar text,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 9. DESATIVAR RLS PARA FACILITAR INTEGRAÇÃO (OPCIONAL MAS RECOMENDADO PARA TESTES)
+ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_reputation DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vehicles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drivers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE branches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE return_reasons DISABLE ROW LEVEL SECURITY;
+ALTER TABLE client_mappings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
   `;
 
   const tabs = [
