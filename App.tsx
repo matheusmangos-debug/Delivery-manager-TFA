@@ -11,7 +11,7 @@ import Settings from './components/Settings';
 import Login from './components/Login';
 import CriticalClients from './components/CriticalClients';
 import { User, Delivery, ReturnReason, CustomerReputation, Branch, Driver, Vehicle, DeliveryStatus, ClientMapping, DateFilterRange } from './types';
-import { db, isSupabaseConfigured, isUsingStripeKey } from './services/supabase';
+import { db, isSupabaseConfigured } from './services/supabase';
 import { MOCK_DELIVERIES, MOCK_DRIVERS, MOCK_VEHICLES, RETURN_REASONS, BRANCHES, MOCK_CUSTOMER_REPUTATION, MOCK_USERS } from './constants';
 
 const App: React.FC = () => {
@@ -48,33 +48,32 @@ const App: React.FC = () => {
     mappings: ['customerId', 'sellerName', 'sellerCode', 'sellerPhone', 'customerName']
   };
 
-  const sanitizeForDb = (data: any, table: string) => {
+  const sanitizeForDb = (data: any, table: string, isUpdate: boolean = false) => {
     const allowed = ALLOWED_COLUMNS[table];
     if (!allowed) return data;
 
     const sanitized: any = {};
-    if (table === 'deliveries') {
-      sanitized.customerId = data.customerId || 'N/I';
-      sanitized.customerName = data.customerName || 'Cliente';
-      sanitized.address = data.address || 'Endereço não informado';
-      sanitized.status = data.status || DeliveryStatus.PENDING;
-      let isoDate = data.date;
-      if (isoDate && isoDate.includes('/')) {
-        const [d, m, y] = isoDate.split('/');
-        isoDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    allowed.forEach(col => {
+      if (data[col] !== undefined) {
+        let value = data[col];
+        if (col === 'date' && typeof value === 'string' && value.includes('/')) {
+          const [d, m, y] = value.split('/');
+          value = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        if (col === 'boxQuantity' || col === 'returnCount' || col === 'complaintCount') {
+          const num = parseInt(String(value), 10);
+          value = isNaN(num) ? 0 : num;
+        }
+        if (col === 'items' && Array.isArray(value)) value = value.join(', ');
+        sanitized[col] = value;
       }
-      sanitized.date = isoDate || new Date().toISOString().split('T')[0];
-      sanitized.deliveryDay = data.deliveryDay || new Date(sanitized.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' });
-      sanitized.trackingCode = data.trackingCode || `TRK-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      sanitized.boxQuantity = parseInt(String(data.boxQuantity || 1), 10);
-      sanitized.driverName = data.driverName || 'Motorista';
-      sanitized.branch = data.branch || 'sp-01';
-      sanitized.returnReason = data.returnReason || null;
-      sanitized.returnNotes = data.returnNotes || null;
-      sanitized.items = Array.isArray(data.items) ? data.items.join(', ') : (data.items || '');
-      return sanitized;
+    });
+
+    if (table === 'deliveries' && !isUpdate) {
+      sanitized.customerId = sanitized.customerId || 'N/I';
+      sanitized.date = sanitized.date || new Date().toISOString().split('T')[0];
     }
-    allowed.forEach(col => { if (data[col] !== undefined) sanitized[col] = data[col]; });
+
     return sanitized;
   };
 
@@ -97,15 +96,11 @@ const App: React.FC = () => {
       let hasError = false;
       results.forEach((res, idx) => {
         if (res.status === 'fulfilled' && !res.value.error) { data[idx] = res.value.data; } 
-        else { hasError = true; console.error(`Erro na tabela ${idx}`); }
+        else { hasError = true; }
       });
 
       if (!hasError) {
-        const formattedDeliveries = (data[0] || []).map((d: any) => ({
-          ...d,
-          items: d.items ? d.items.split(',').map((i: string) => i.trim()) : []
-        }));
-        setDeliveries(formattedDeliveries);
+        setDeliveries((data[0] || []).map((d: any) => ({ ...d, items: d.items ? d.items.split(',').map((i: string) => i.trim()) : [] })));
         if (data[1]) setBranches(data[1]);
         if (data[2]) setReasons(data[2]);
         if (data[3]) setDrivers(data[3]);
@@ -154,51 +149,72 @@ const App: React.FC = () => {
   }, [deliveries, selectedBranch, filterRange, customDate]);
 
   const updateDelivery = async (id: string, updates: Partial<Delivery>) => {
-    if (dbStatus === 'online') await db.deliveries().update(sanitizeForDb(updates, 'deliveries')).eq('id', id);
+    if (dbStatus === 'online') await db.deliveries().update(sanitizeForDb(updates, 'deliveries', true)).eq('id', id);
     setDeliveries(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
   };
 
   const addDeliveries = async (newOnes: any[]) => {
-    const toInsert = newOnes.map(d => sanitizeForDb(d, 'deliveries'));
+    const today = new Date().toISOString().split('T')[0];
+    const toInsert = newOnes.map(d => sanitizeForDb({ ...d, date: today }, 'deliveries'));
     if (dbStatus === 'online') {
       const { data, error } = await db.deliveries().insert(toInsert).select();
       if (!error && data) {
         const formattedData = data.map(d => ({ ...d, items: d.items ? d.items.split(',').map((i: string) => i.trim()) : [] }));
         setDeliveries(prev => [...formattedData, ...prev]);
-      } else if (error) {
-        alert(`Erro ao inserir no banco: ${error.message}`);
-      }
-    } else { setDeliveries(prev => [...newOnes, ...prev]); }
+      } else if (error) { alert(`Erro ao inserir no banco: ${error.message}`); }
+    } else { setDeliveries(prev => [...newOnes.map(n => ({...n, id: crypto.randomUUID(), date: today})), ...prev]); }
   };
 
-  const addBranch = async (branch: Branch) => {
-    if (dbStatus === 'online') await db.branches().insert([sanitizeForDb(branch, 'branches')]);
-    setBranches(prev => [...prev, branch]);
-  };
-  const addDriver = async (driver: Driver) => {
-    if (dbStatus === 'online') await db.drivers().insert([sanitizeForDb(driver, 'drivers')]);
-    setDrivers(prev => [...prev, driver]);
-  };
-  const addVehicle = async (vehicle: Vehicle) => {
-    if (dbStatus === 'online') await db.vehicles().insert([sanitizeForDb(vehicle, 'vehicles')]);
-    setVehicles(prev => [...prev, vehicle]);
-  };
-  const addReason = async (reason: ReturnReason) => {
-    if (dbStatus === 'online') await db.reasons().insert([sanitizeForDb(reason, 'reasons')]);
-    setReasons(prev => [...prev, reason]);
-  };
   const addMapping = async (mapping: ClientMapping) => {
-    if (dbStatus === 'online') await db.mappings().insert([sanitizeForDb(mapping, 'mappings')]);
+    const clean = sanitizeForDb(mapping, 'mappings');
+    if (dbStatus === 'online') {
+      const { error } = await db.mappings().insert([clean]);
+      if (error) { alert("Erro ao cadastrar cliente: " + error.message); return; }
+    }
     setClientMappings(prev => [...prev, mapping]);
   };
+
   const bulkAddMappings = async (mappings: ClientMapping[]) => {
     const cleanMappings = mappings.map(m => sanitizeForDb(m, 'mappings'));
-    if (dbStatus === 'online') await db.mappings().insert(cleanMappings);
+    if (dbStatus === 'online') {
+      const { error } = await db.mappings().insert(cleanMappings);
+      if (error) { alert("Erro na importação em massa: " + error.message); return; }
+    }
     setClientMappings(prev => [...prev, ...mappings]);
   };
+
   const addCritical = async (critical: CustomerReputation) => {
-    if (dbStatus === 'online') await db.critical_base().insert([sanitizeForDb(critical, 'critical_base')]);
+    const clean = sanitizeForDb(critical, 'critical_base');
+    if (dbStatus === 'online') await db.critical_base().insert([clean]);
     setCustomerDatabase(prev => [...prev, critical]);
+  };
+
+  // Add reason to database and local state
+  const addReason = async (reason: ReturnReason) => {
+    const clean = sanitizeForDb(reason, 'reasons');
+    if (dbStatus === 'online') await db.reasons().insert([clean]);
+    setReasons(prev => [...prev, reason]);
+  };
+
+  // Add branch to database and local state
+  const addBranch = async (branch: Branch) => {
+    const clean = sanitizeForDb(branch, 'branches');
+    if (dbStatus === 'online') await db.branches().insert([clean]);
+    setBranches(prev => [...prev, branch]);
+  };
+
+  // Add driver to database and local state
+  const addDriver = async (driver: Driver) => {
+    const clean = sanitizeForDb(driver, 'drivers');
+    if (dbStatus === 'online') await db.drivers().insert([clean]);
+    setDrivers(prev => [...prev, driver]);
+  };
+
+  // Add vehicle to database and local state
+  const addVehicle = async (vehicle: Vehicle) => {
+    const clean = sanitizeForDb(vehicle, 'vehicles');
+    if (dbStatus === 'online') await db.vehicles().insert([clean]);
+    setVehicles(prev => [...prev, vehicle]);
   };
 
   if (!currentUser) return <Login dbStatus={dbStatus} onLogin={u => { setCurrentUser(u); localStorage.setItem('swiftlog_current_session', JSON.stringify(u)); }} onRegister={u => { if (dbStatus === 'online') db.users().insert([sanitizeForDb(u, 'users')]); setCurrentUser(u); localStorage.setItem('swiftlog_current_session', JSON.stringify(u)); }} existingUsers={users} />;
@@ -206,31 +222,8 @@ const App: React.FC = () => {
   return (
     <Layout user={currentUser} activeTab={activeTab} dbStatus={dbStatus} onTabChange={setActiveTab} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} filterRange={filterRange} onFilterRangeChange={setFilterRange} customDate={customDate} onCustomDateChange={setCustomDate} branches={branches} onLogout={() => { setCurrentUser(null); localStorage.removeItem('swiftlog_current_session'); }} onRefresh={fetchAllData}>
       {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
-      {activeTab === 'deliveries' && (
-        <DeliveryList 
-          selectedBranch={selectedBranch} 
-          deliveries={filteredDeliveries} 
-          onUpdate={updateDelivery} 
-          onBulkUpdate={async (ids, status) => { 
-            if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); 
-            setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); 
-          }} 
-          onBulkUpdateDate={async (ids, date) => {
-            const deliveryDay = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' });
-            if (dbStatus === 'online') await db.deliveries().update({ date, deliveryDay }).in('id', ids);
-            setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, date, deliveryDay } : d));
-          }}
-          onDeleteDeliveries={async ids => { 
-            if(dbStatus==='online') await db.deliveries().delete().in('id', ids); 
-            setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); 
-          }} 
-          onAddDeliveries={addDeliveries} 
-          returnReasons={reasons} 
-          customerHistory={customerDatabase} 
-          clientMappings={clientMappings} 
-        />
-      )}
-      {activeTab === 'critical-clients' && <CriticalClients deliveries={deliveries} customerHistory={customerDatabase} selectedBranch={selectedBranch} filterDate={customDate} onUpdateClient={async (cid, upds) => { if (dbStatus === 'online') await db.critical_base().update(sanitizeForDb(upds, 'critical_base')).eq('customerId', cid); setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c)); }} />}
+      {activeTab === 'deliveries' && <DeliveryList selectedBranch={selectedBranch} deliveries={filteredDeliveries} onUpdate={updateDelivery} onBulkUpdate={async (ids, status) => { if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); }} onBulkUpdateDate={async (ids, date) => { const deliveryDay = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' }); if (dbStatus === 'online') await db.deliveries().update({ date, deliveryDay }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, date, deliveryDay } : d)); }} onDeleteDeliveries={async ids => { if(dbStatus==='online') await db.deliveries().delete().in('id', ids); setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); }} onAddDeliveries={addDeliveries} returnReasons={reasons} customerHistory={customerDatabase} clientMappings={clientMappings} />}
+      {activeTab === 'critical-clients' && <CriticalClients deliveries={deliveries} customerHistory={customerDatabase} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={bulkAddMappings} selectedBranch={selectedBranch} filterDate={customDate} onUpdateClient={async (cid, upds) => { if (dbStatus === 'online') await db.critical_base().update(sanitizeForDb(upds, 'critical_base', true)).eq('customerId', cid); setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c)); }} />}
       {activeTab === 'team' && <TeamPerformance selectedBranch={selectedBranch} deliveries={filteredDeliveries} drivers={drivers} onBulkUpdateStatus={async (ids, s) => { if (dbStatus === 'online') await db.drivers().update({ manualStatus: s }).in('id', ids); setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d)); }} />}
       {activeTab === 'returns' && <ReturnPortal selectedBranch={selectedBranch} deliveries={filteredDeliveries} clientMappings={clientMappings} />}
       {activeTab === 'analytics' && <AnalyticsView selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
