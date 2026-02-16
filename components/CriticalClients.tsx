@@ -6,14 +6,13 @@ interface CriticalClientsProps {
   deliveries: Delivery[];
   customerHistory: CustomerReputation[];
   selectedBranch: string;
-  filterDate: string; // Adicionado para interligação
+  filterDate: string;
   onUpdateClient?: (customerId: string, updates: Partial<CustomerReputation>) => void;
 }
 
 const CriticalClients: React.FC<CriticalClientsProps> = ({ deliveries, customerHistory, selectedBranch, filterDate, onUpdateClient }) => {
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Formatar a data selecionada no filtro para comparar com delivery.date
   const formattedFilterDate = useMemo(() => {
     if (!filterDate) return new Date().toLocaleDateString('pt-BR');
     const [y, m, d] = filterDate.split('-');
@@ -24,7 +23,6 @@ const CriticalClients: React.FC<CriticalClientsProps> = ({ deliveries, customerH
     return customerHistory
       .filter(h => statusFilter === 'all' || h.status === statusFilter)
       .map(history => {
-        // Busca se existe entrega para este cliente na data selecionada
         const deliveryToday = deliveries.find(d => 
           d.customerId === history.customerId && 
           d.date === formattedFilterDate
@@ -48,7 +46,7 @@ const CriticalClients: React.FC<CriticalClientsProps> = ({ deliveries, customerH
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+        <div className="p-8 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between flex-wrap gap-4">
           <div>
             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Painel de Clientes Críticos</h3>
             <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Sincronizado com entregas de: {formattedFilterDate}</p>
@@ -56,12 +54,12 @@ const CriticalClients: React.FC<CriticalClientsProps> = ({ deliveries, customerH
           
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtrar por Status:</span>
-            <div className="flex bg-white border border-slate-200 p-1 rounded-xl">
-              {['all', 'Retorno', 'Pendência', 'Reclamação'].map((s) => (
+            <div className="flex bg-white border border-slate-200 p-1 rounded-xl overflow-x-auto no-scrollbar">
+              {['all', 'Retorno', 'Pendência', 'Reclamação', 'Restrição de Horário'].map((s) => (
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
-                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all whitespace-nowrap ${
                     statusFilter === s ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
@@ -90,7 +88,9 @@ const CriticalClients: React.FC<CriticalClientsProps> = ({ deliveries, customerH
                   <td className="px-8 py-5 text-xs font-black text-slate-400 uppercase">{client.registrationDate}</td>
                   <td className="px-8 py-5 text-sm font-black uppercase text-slate-800">{client.customerId}</td>
                   <td className="px-8 py-5">
-                    <span className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase rounded">{client.status}</span>
+                    <span className={`px-2 py-1 text-[9px] font-black uppercase rounded ${
+                      client.status === 'Restrição de Horário' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
+                    }`}>{client.status}</span>
                   </td>
                   <td className="px-8 py-5">
                     <p className="text-xs text-slate-600 font-medium italic">"{client.notes}"</p>

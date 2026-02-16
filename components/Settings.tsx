@@ -21,10 +21,11 @@ const Settings: React.FC<SettingsProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'reasons' | 'critical-base' | 'branches' | 'vehicles' | 'drivers' | 'mappings' | 'database'>('reasons');
   const [mappingMode, setMappingMode] = useState<'individual' | 'bulk'>('individual');
-  const [temp, setTemp] = useState<any>({});
+  const [temp, setTemp] = useState<any>({ cstatus: 'Retorno', crisk: 'low' });
 
   const SQL_SCHEMA = `
--- COLE ESTE SQL NO 'SQL EDITOR' DO SEU SUPABASE PARA CRIAR AS TABELAS CORRETAMENTE
+-- SQL DE EMERGÊNCIA - SWIFTLOG PRO
+-- Execute no SQL Editor do Supabase se houver erros 400
 
 CREATE TABLE IF NOT EXISTS deliveries (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -64,27 +65,18 @@ CREATE TABLE IF NOT EXISTS vehicles (
   "driverId" text
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  name text,
-  email text UNIQUE,
-  password text,
-  role text,
-  avatar text
-);
-
-CREATE TABLE IF NOT EXISTS branches (
-  id text PRIMARY KEY,
-  name text,
-  location text
-);
-
 CREATE TABLE IF NOT EXISTS drivers (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text,
   "branchId" text,
   status text,
   "manualStatus" text
+);
+
+CREATE TABLE IF NOT EXISTS branches (
+  id text PRIMARY KEY,
+  name text,
+  location text
 );
 
 CREATE TABLE IF NOT EXISTS return_reasons (
@@ -132,9 +124,9 @@ CREATE TABLE IF NOT EXISTS client_mappings (
                 <i className="fas fa-triangle-exclamation"></i>
               </div>
               <div>
-                <h3 className="font-black text-amber-800 uppercase text-sm mb-1">Evite o Erro 400 (Bad Request)</h3>
+                <h3 className="font-black text-amber-800 uppercase text-sm mb-1">Configuração de Banco de Dados</h3>
                 <p className="text-xs text-amber-700 font-medium leading-relaxed">
-                  Certifique-se que seu banco Supabase possui as tabelas abaixo. Se notar erros ao salvar, execute este script no SQL Editor.
+                  Execute este script no SQL Editor do seu projeto Supabase para garantir compatibilidade total com o sistema.
                 </p>
               </div>
             </div>
@@ -164,9 +156,9 @@ CREATE TABLE IF NOT EXISTS client_mappings (
             </div>
             <div className="grid grid-cols-2 gap-4">
               {reasons.map(r => (
-                <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200">
+                <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 group">
                   <span className="font-black uppercase text-xs text-slate-700 tracking-tight">{r.label}</span>
-                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
@@ -186,19 +178,19 @@ CREATE TABLE IF NOT EXISTS client_mappings (
             </div>
             <div className="grid grid-cols-2 gap-4">
               {branches.map(b => (
-                <div key={b.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white">
+                <div key={b.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white group">
                   <div>
                     <p className="font-black uppercase text-xs text-indigo-600">{b.id}</p>
                     <p className="font-bold text-sm text-slate-800">{b.name}</p>
                   </div>
-                  <button onClick={() => onRemoveBranch(b.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveBranch(b.id)} className="text-slate-200 group-hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* CADASTRO DE FROTA (VEÍCULOS) */}
+        {/* CADASTRO DE FROTA */}
         {activeSubTab === 'vehicles' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -214,7 +206,7 @@ CREATE TABLE IF NOT EXISTS client_mappings (
             </div>
             <div className="grid grid-cols-2 gap-4">
               {vehicles.map(v => (
-                <div key={v.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white">
+                <div key={v.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white group">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs uppercase">{v.plate.slice(-2)}</div>
                     <div>
@@ -222,14 +214,14 @@ CREATE TABLE IF NOT EXISTS client_mappings (
                       <p className="text-[10px] font-bold text-slate-400 uppercase">{v.model}</p>
                     </div>
                   </div>
-                  <button onClick={() => onRemoveVehicle(v.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveVehicle(v.id)} className="text-slate-200 group-hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* CADASTRO DE EQUIPE (MOTORISTAS) */}
+        {/* CADASTRO DE EQUIPE */}
         {activeSubTab === 'drivers' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -245,7 +237,7 @@ CREATE TABLE IF NOT EXISTS client_mappings (
             </div>
             <div className="grid grid-cols-2 gap-4">
               {drivers.map(d => (
-                <div key={d.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white">
+                <div key={d.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white group">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center font-black text-xs uppercase">{d.name.charAt(0)}</div>
                     <div>
@@ -253,7 +245,7 @@ CREATE TABLE IF NOT EXISTS client_mappings (
                       <p className="text-[10px] font-bold text-slate-400 uppercase">CNH {d.licenseType} • {branches.find(b => b.id === d.branchId)?.name}</p>
                     </div>
                   </div>
-                  <button onClick={() => onRemoveDriver(d.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveDriver(d.id)} className="text-slate-200 group-hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
@@ -266,41 +258,42 @@ CREATE TABLE IF NOT EXISTS client_mappings (
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
               <div className="grid grid-cols-4 gap-4">
                 <input placeholder="Matrícula" value={temp.ccid || ''} onChange={e => setTemp({...temp, ccid: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white uppercase" />
-                <select value={temp.cstatus || ''} onChange={e => setTemp({...temp, cstatus: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
+                <select value={temp.cstatus || 'Retorno'} onChange={e => setTemp({...temp, cstatus: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
                   <option value="Retorno">Retorno</option>
                   <option value="Pendência">Pendência</option>
                   <option value="Reclamação">Reclamação</option>
+                  <option value="Restrição de Horário">Restrição de Horário</option>
                 </select>
                 <select value={temp.crisk || 'low'} onChange={e => setTemp({...temp, crisk: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
                   <option value="low">Risco Baixo</option>
                   <option value="medium">Risco Médio</option>
                   <option value="high">Risco Alto</option>
                 </select>
-                <button onClick={() => { onAddCritical({customerId: temp.ccid, returnCount: 0, complaintCount: 0, notes: temp.cnotes, status: temp.cstatus as any, riskLevel: temp.crisk as any, resolutionStatus: 'Pendente', registrationDate: new Date().toLocaleDateString('pt-BR')}); setTemp({}); }} className="py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar</button>
+                <button onClick={() => { onAddCritical({customerId: temp.ccid, returnCount: 0, complaintCount: 0, notes: temp.cnotes, status: temp.cstatus as any, riskLevel: temp.crisk as any, resolutionStatus: 'Pendente', registrationDate: new Date().toLocaleDateString('pt-BR')}); setTemp({ cstatus: 'Retorno', crisk: 'low' }); }} className="py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar</button>
                 <textarea placeholder="Notas e Histórico do Cliente..." value={temp.cnotes || ''} onChange={e => setTemp({...temp, cnotes: e.target.value})} className="col-span-4 h-24 p-4 rounded-2xl border font-bold text-sm bg-white" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               {customerDatabase.map(c => (
-                <div key={c.customerId} className={`p-5 border rounded-3xl flex items-center justify-between bg-white ${c.riskLevel === 'high' ? 'border-l-4 border-rose-500' : ''}`}>
+                <div key={c.customerId} className={`p-5 border rounded-3xl flex items-center justify-between bg-white group ${c.riskLevel === 'high' ? 'border-l-4 border-rose-500' : ''}`}>
                   <div>
                     <p className="font-black uppercase text-xs text-indigo-600">{c.customerId}</p>
                     <p className="font-bold text-sm text-slate-800">{c.status}</p>
                     <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold">{c.notes?.slice(0, 50)}...</p>
                   </div>
-                  <button onClick={() => onRemoveCritical(c.customerId)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveCritical(c.customerId)} className="text-slate-200 group-hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* CADASTRO DE VENDEDORES (MAPPINGS) */}
+        {/* CADASTRO DE VENDEDORES */}
         {activeSubTab === 'mappings' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex items-center gap-4 mb-2">
               <button onClick={() => setMappingMode('individual')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'individual' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Manual</button>
-              <button onClick={() => setMappingMode('bulk')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'bulk' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Massa (Planilha)</button>
+              <button onClick={() => setMappingMode('bulk')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'bulk' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Massa</button>
             </div>
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner">
               {mappingMode === 'individual' ? (
@@ -329,12 +322,12 @@ CREATE TABLE IF NOT EXISTS client_mappings (
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {clientMappings.map(m => (
-                <div key={m.customerId} className="p-6 border rounded-3xl flex justify-between items-center bg-white shadow-sm">
+                <div key={m.customerId} className="p-6 border rounded-3xl flex justify-between items-center bg-white shadow-sm group">
                   <div>
                     <p className="font-black text-indigo-600 text-[10px] uppercase">CLIENTE: {m.customerId}</p>
                     <p className="font-bold text-slate-800 uppercase text-xs mt-1">{m.sellerName}</p>
                   </div>
-                  <button onClick={() => onRemoveMapping(m.customerId)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveMapping(m.customerId)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
