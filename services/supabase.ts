@@ -2,26 +2,33 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * CONFIGURAÇÃO DO SUPABASE
+ * CONFIGURAÇÃO DO SUPABASE - SWIFTLOG PRO
  * -------------------------
- * URL: https://cpxtorqsurwquxycmxzg.supabase.co
- * NOTA: Chaves que iniciam com 'sb_publishable' são comumente associadas ao Stripe. 
- * Para o Supabase, certifique-se de usar a 'anon public' key encontrada em Settings -> API.
+ * Integração Realtime Ativada
+ * Nota: Certifique-se de que a chave ANON seja a 'Public Anon' do dashboard do Supabase.
  */
 
 const SUPABASE_URL = 'https://cpxtorqsurwquxycmxzg.supabase.co';
-
-// Chave fornecida pelo usuário
+// Chave enviada pelo usuário
 const SUPABASE_ANON_KEY = 'sb_publishable__X_ayE62nu5SQ9u2F2xMFw_xAIQFUcF'; 
 
-// Validações de integridade - Ajustado para aceitar a nova chave
-export const isSupabaseConfigured = SUPABASE_ANON_KEY.length > 10;
-export const isUsingStripeKey = SUPABASE_ANON_KEY.startsWith('sb_');
+// Validação de configuração
+export const isSupabaseConfigured = SUPABASE_ANON_KEY.length > 20;
 
-// Inicialização do cliente Supabase
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Inicialização segura do cliente
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true
+  }
+});
 
-// Interface de acesso ao banco (Tabelas do Schema SwiftLog Pro)
+// Interface de acesso ao banco (Mapeamento completo das tabelas do SQL Editor)
 export const db = {
   deliveries: () => supabase.from('deliveries'),
   users: () => supabase.from('users'),

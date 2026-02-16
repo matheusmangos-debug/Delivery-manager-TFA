@@ -11,7 +11,7 @@ import Settings from './components/Settings';
 import Login from './components/Login';
 import CriticalClients from './components/CriticalClients';
 import { User, Delivery, ReturnReason, CustomerReputation, Branch, Driver, Vehicle, DeliveryStatus, ClientMapping, DateFilterRange } from './types';
-import { db, isSupabaseConfigured } from './services/supabase';
+import { db, isSupabaseConfigured, supabase } from './services/supabase';
 import { MOCK_DELIVERIES, MOCK_DRIVERS, MOCK_VEHICLES, RETURN_REASONS, BRANCHES, MOCK_CUSTOMER_REPUTATION, MOCK_USERS } from './constants';
 
 const App: React.FC = () => {
@@ -79,7 +79,8 @@ const App: React.FC = () => {
 
   const fetchAllData = async () => {
     if (!isSupabaseConfigured) { setDbStatus('offline'); return; }
-    setDbStatus('connecting');
+    if (dbStatus === 'offline') setDbStatus('connecting');
+    
     try {
       const results = await Promise.allSettled([
         db.deliveries().select('*').order('date', { ascending: false }),
@@ -109,15 +110,36 @@ const App: React.FC = () => {
         if (data[6]) setClientMappings(data[6]);
         if (data[7]) setUsers(data[7]);
         setDbStatus('online');
-      } else { setDbStatus('offline'); }
-    } catch (err) { setDbStatus('offline'); }
+      } else { 
+        setDbStatus('offline'); 
+      }
+    } catch (err) { 
+      setDbStatus('offline'); 
+    }
   };
 
   useEffect(() => {
     if (window.aistudio) window.aistudio.hasSelectedApiKey().then(setHasApiKey);
     const savedSession = localStorage.getItem('swiftlog_current_session');
     if (savedSession) setCurrentUser(JSON.parse(savedSession));
+    
     fetchAllData();
+
+    const channel = supabase
+      .channel('swiftlog-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_reputation' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_mappings' }, () => fetchAllData())
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime sincronizado');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredDeliveries = useMemo(() => {
@@ -161,7 +183,7 @@ const App: React.FC = () => {
       if (!error && data) {
         const formattedData = data.map(d => ({ ...d, items: d.items ? d.items.split(',').map((i: string) => i.trim()) : [] }));
         setDeliveries(prev => [...formattedData, ...prev]);
-      } else if (error) { alert(`Erro ao inserir no banco: ${error.message}`); }
+      } else if (error) { alert(`Erro: ${error.message}`); }
     } else { setDeliveries(prev => [...newOnes.map(n => ({...n, id: crypto.randomUUID(), date: today})), ...prev]); }
   };
 
@@ -169,7 +191,7 @@ const App: React.FC = () => {
     const clean = sanitizeForDb(mapping, 'mappings');
     if (dbStatus === 'online') {
       const { error } = await db.mappings().insert([clean]);
-      if (error) { alert("Erro ao cadastrar cliente: " + error.message); return; }
+      if (error) { alert("Erro: " + error.message); return; }
     }
     setClientMappings(prev => [...prev, mapping]);
   };
@@ -178,7 +200,7 @@ const App: React.FC = () => {
     const cleanMappings = mappings.map(m => sanitizeForDb(m, 'mappings'));
     if (dbStatus === 'online') {
       const { error } = await db.mappings().insert(cleanMappings);
-      if (error) { alert("Erro na importação em massa: " + error.message); return; }
+      if (error) { alert("Erro: " + error.message); return; }
     }
     setClientMappings(prev => [...prev, ...mappings]);
   };
@@ -189,28 +211,24 @@ const App: React.FC = () => {
     setCustomerDatabase(prev => [...prev, critical]);
   };
 
-  // Add reason to database and local state
   const addReason = async (reason: ReturnReason) => {
     const clean = sanitizeForDb(reason, 'reasons');
     if (dbStatus === 'online') await db.reasons().insert([clean]);
     setReasons(prev => [...prev, reason]);
   };
 
-  // Add branch to database and local state
   const addBranch = async (branch: Branch) => {
     const clean = sanitizeForDb(branch, 'branches');
     if (dbStatus === 'online') await db.branches().insert([clean]);
     setBranches(prev => [...prev, branch]);
   };
 
-  // Add driver to database and local state
   const addDriver = async (driver: Driver) => {
     const clean = sanitizeForDb(driver, 'drivers');
     if (dbStatus === 'online') await db.drivers().insert([clean]);
     setDrivers(prev => [...prev, driver]);
   };
 
-  // Add vehicle to database and local state
   const addVehicle = async (vehicle: Vehicle) => {
     const clean = sanitizeForDb(vehicle, 'vehicles');
     if (dbStatus === 'online') await db.vehicles().insert([clean]);
