@@ -2,14 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 export class GeminiService {
-  /* Use process.env.API_KEY diretamente conforme as diretrizes */
   private static getAI() {
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.warn("Gemini API Key não encontrada. As funções de IA estarão desativadas.");
+      return null;
+    }
+    return new GoogleGenAI({ apiKey });
   }
 
   /* Gera imagens de marketing usando gemini-3-pro-image-preview */
   static async generateMarketingImage(prompt: string, size: "1K" | "2K" | "4K" = "1K") {
     const ai = this.getAI();
+    if (!ai) return null;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-image-preview',
       contents: {
@@ -34,6 +40,8 @@ export class GeminiService {
   /* Edita imagens usando gemini-2.5-flash-image */
   static async editImage(imageBase64: string, instruction: string) {
     const ai = this.getAI();
+    if (!ai) return null;
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
@@ -60,6 +68,8 @@ export class GeminiService {
   /* Chat assistente profissional usando gemini-3-pro-preview */
   static async chatWithAssistant(message: string, history: any[] = []) {
     const ai = this.getAI();
+    if (!ai) return "O serviço de IA está temporariamente indisponível (Chave de API não configurada).";
+
     const chat = ai.chats.create({
       model: 'gemini-3-pro-preview',
       config: {
@@ -74,6 +84,8 @@ export class GeminiService {
   /* Extração inteligente de arquivos (Imagens/PDFs) */
   static async parseCustomerFile(base64Data: string, mimeType: string) {
     const ai = this.getAI();
+    if (!ai) return [];
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -105,6 +117,8 @@ export class GeminiService {
   /* Extração inteligente de texto copiado de PLANILHAS */
   static async parseSpreadsheetText(rawText: string) {
     const ai = this.getAI();
+    if (!ai) return [];
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Analise o seguinte texto copiado de uma planilha de logística e extraia as colunas para um formato JSON estruturado. Identifique: Matrícula do cliente, Nome, Endereço, Código de Rastreio/Transporte, Nome do Motorista e Quantidade de Caixas (Volumes). Texto: \n\n${rawText}`,
