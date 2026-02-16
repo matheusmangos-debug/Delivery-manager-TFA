@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { ANALYTICS_DATA, BRANCHES } from '../constants';
+import { BRANCHES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DeliveryStatus, Delivery } from '../types';
 
@@ -18,6 +18,25 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, selectedBranch, deliv
   const totalBoxes = useMemo(() => {
     return branchDeliveries.reduce((acc, curr) => acc + (curr.boxQuantity || 0), 0);
   }, [branchDeliveries]);
+
+  // Cálculo Dinâmico do Gráfico Operacional dos últimos 7 dias
+  const dynamicChartData = useMemo(() => {
+    const last7Days = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return d.toISOString().split('T')[0];
+    }).reverse();
+
+    return last7Days.map(date => {
+      const dayDeliveries = deliveries.filter(d => d.date === date);
+      const dayName = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' });
+      return {
+        name: dayName.charAt(0).toUpperCase() + dayName.slice(1),
+        deliveries: dayDeliveries.length,
+        returns: dayDeliveries.filter(d => d.status === DeliveryStatus.RETURNED).length
+      };
+    });
+  }, [deliveries]);
 
   const driverRanking = useMemo(() => {
     const stats: Record<string, { total: number, completed: number }> = {};
@@ -60,7 +79,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, selectedBranch, deliv
         </h2>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
           <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
@@ -79,15 +97,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, selectedBranch, deliv
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Gráfico Principal */}
         <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Fluxo Operacional Consolidado</h3>
+            <h3 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Fluxo Operacional Dinâmico (7 dias)</h3>
             <button onClick={() => onNavigate('analytics')} className="text-xs text-indigo-600 font-black uppercase tracking-widest">Análise Completa</button>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ANALYTICS_DATA}>
+              <BarChart data={dynamicChartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} />
@@ -99,7 +116,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, selectedBranch, deliv
           </div>
         </div>
 
-        {/* Top Performance */}
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Top Performance</h3>
@@ -120,86 +136,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, selectedBranch, deliv
                   </span>
                 </div>
               </div>
-            )) : <p className="text-xs text-slate-400 italic">Nenhum dado disponível.</p>}
+            )) : <p className="text-xs text-slate-400 italic">Dados processando...</p>}
           </div>
           <div className="mt-8 p-5 bg-indigo-600 rounded-[1.5rem] text-white">
             <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-1">Capacidade Operacional</p>
-            <p className="text-3xl font-black">76%</p>
-            <p className="text-[10px] text-indigo-300 font-bold uppercase">{branchName}</p>
+            <p className="text-3xl font-black">{dynamicChartData.reduce((a,b)=>a+b.deliveries, 0)}</p>
+            <p className="text-[10px] text-indigo-300 font-bold uppercase">Volume Total do Período</p>
           </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Baixo Desempenho */}
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-               <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
-                  <i className="fas fa-triangle-exclamation"></i>
-               </div>
-               <h3 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Baixo Desempenho (&lt;75%)</h3>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {lowPerformers.length > 0 ? lowPerformers.map((driver) => (
-              <div key={driver.name} className="flex items-center justify-between p-4 bg-rose-50/30 rounded-2xl border border-rose-100/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-rose-500 shadow-sm">
-                    <i className="fas fa-user-xmark"></i>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{driver.name}</p>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-tight">Requer Atenção</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-black text-rose-600">
-                    {driver.efficiency.toFixed(0)}%
-                  </span>
-                  <div className="w-16 h-1 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                    <div className="h-full bg-rose-500" style={{width: `${driver.efficiency}%`}}></div>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div className="py-10 text-center flex flex-col items-center opacity-40">
-                <i className="fas fa-shield-check text-emerald-500 text-3xl mb-2"></i>
-                <p className="text-xs font-bold text-slate-500 uppercase">Todos os motoristas operando acima da meta!</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Ocorrências Críticas (Com quantidade de caixas) */}
-        <div className="bg-slate-900 p-8 rounded-[2rem] shadow-xl text-white">
-          <h3 className="text-lg font-black uppercase tracking-tight mb-6 flex items-center gap-3">
-             <i className="fas fa-rotate-left text-rose-500"></i>
-             Ocorrências Críticas
-          </h3>
-          <div className="space-y-4">
-             {branchDeliveries.filter(d => d.status === DeliveryStatus.RETURNED).slice(0, 4).map(ret => (
-               <div key={ret.id} className="flex items-center justify-between border-b border-slate-800 pb-4 last:border-0">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-black uppercase tracking-tighter text-indigo-400">{ret.customerId}</p>
-                    <p className="text-sm font-bold truncate pr-4">{ret.customerName}</p>
-                    <p className="text-[9px] text-slate-500 font-black uppercase mt-0.5">{ret.returnReason || 'Motivo N/A'}</p>
-                  </div>
-                  <div className="text-right flex flex-col items-end">
-                    <span className="text-sm font-black text-rose-500 px-3 py-1 bg-rose-500/10 rounded-xl border border-rose-500/20">
-                      {ret.boxQuantity} cx
-                    </span>
-                    <span className="text-[8px] font-black text-slate-500 uppercase mt-1 tracking-widest">Volume Retornado</span>
-                  </div>
-               </div>
-             ))}
-             {branchDeliveries.filter(d => d.status === DeliveryStatus.RETURNED).length === 0 && (
-               <p className="text-sm text-slate-500 italic py-6">Sem ocorrências registradas no período.</p>
-             )}
-          </div>
-          <button onClick={() => onNavigate('returns')} className="w-full mt-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-slate-700">
-             Ver Central de Devoluções
-          </button>
         </div>
       </div>
     </div>

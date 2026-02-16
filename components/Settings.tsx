@@ -19,26 +19,89 @@ const Settings: React.FC<SettingsProps> = ({
   vehicles, onAddVehicle, onRemoveVehicle,
   clientMappings, onAddMapping, onBulkAddMappings, onRemoveMapping
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'reasons' | 'critical-base' | 'branches' | 'vehicles' | 'drivers' | 'mappings'>('reasons');
+  const [activeSubTab, setActiveSubTab] = useState<'reasons' | 'critical-base' | 'branches' | 'vehicles' | 'drivers' | 'mappings' | 'database'>('reasons');
   const [mappingMode, setMappingMode] = useState<'individual' | 'bulk'>('individual');
   const [temp, setTemp] = useState<any>({});
 
-  const handleBulkMappings = () => {
-    if (!temp.bulkText?.trim()) return;
-    const lines = temp.bulkText.split('\n').filter((l: string) => l.trim());
-    const newMappings = lines.map((line: string) => {
-      const parts = line.split('\t').length > 1 ? line.split('\t') : line.split(';');
-      return {
-        customerId: parts[0]?.trim() || `MAT-${Math.floor(Math.random() * 90000)}`,
-        customerName: parts[1]?.trim() || 'N/I',
-        sellerCode: parts[2]?.trim() || 'VD-00',
-        sellerName: parts[3]?.trim() || 'Vendedor Manual',
-        sellerPhone: parts[4]?.trim() || ''
-      };
-    });
-    onBulkAddMappings(newMappings);
-    setTemp({});
-  };
+  const SQL_SCHEMA = `
+-- COLE ESTE SQL NO 'SQL EDITOR' DO SEU SUPABASE PARA CRIAR AS TABELAS CORRETAMENTE
+
+CREATE TABLE IF NOT EXISTS deliveries (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  "customerId" text NOT NULL,
+  "customerName" text,
+  address text,
+  status text,
+  date date,
+  "deliveryDay" text,
+  "trackingCode" text,
+  items text,
+  "boxQuantity" integer,
+  "driverName" text,
+  branch text,
+  "returnReason" text,
+  "returnNotes" text,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS customer_reputation (
+  "customerId" text PRIMARY KEY,
+  "returnCount" integer DEFAULT 0,
+  "complaintCount" integer DEFAULT 0,
+  notes text,
+  status text,
+  "riskLevel" text,
+  "resolutionStatus" text DEFAULT 'Pendente',
+  "registrationDate" text
+);
+
+CREATE TABLE IF NOT EXISTS vehicles (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  plate text UNIQUE,
+  model text,
+  capacity text,
+  "branchId" text,
+  "driverId" text
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text,
+  email text UNIQUE,
+  password text,
+  role text,
+  avatar text
+);
+
+CREATE TABLE IF NOT EXISTS branches (
+  id text PRIMARY KEY,
+  name text,
+  location text
+);
+
+CREATE TABLE IF NOT EXISTS drivers (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text,
+  "branchId" text,
+  status text,
+  "manualStatus" text
+);
+
+CREATE TABLE IF NOT EXISTS return_reasons (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  label text,
+  color text,
+  "isActive" boolean DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS client_mappings (
+  "customerId" text PRIMARY KEY,
+  "sellerName" text,
+  "sellerCode" text,
+  "sellerPhone" text,
+  "customerName" text
+);
+  `;
 
   const tabs = [
     { id: 'reasons', label: 'Motivos', icon: 'fa-clipboard-list' },
@@ -47,6 +110,7 @@ const Settings: React.FC<SettingsProps> = ({
     { id: 'branches', label: 'Filiais', icon: 'fa-building' },
     { id: 'vehicles', label: 'Frota', icon: 'fa-truck-front' },
     { id: 'drivers', label: 'Equipe', icon: 'fa-users' },
+    { id: 'database', label: 'Banco de Dados', icon: 'fa-database' },
   ];
 
   return (
@@ -61,7 +125,34 @@ const Settings: React.FC<SettingsProps> = ({
 
       <div className="bg-white rounded-b-3xl border border-slate-100 shadow-sm p-8 min-h-[550px]">
         
-        {/* TAB: MOTIVOS */}
+        {activeSubTab === 'database' && (
+          <div className="space-y-6 max-w-4xl">
+            <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex items-start gap-4">
+              <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center text-xl shrink-0">
+                <i className="fas fa-triangle-exclamation"></i>
+              </div>
+              <div>
+                <h3 className="font-black text-amber-800 uppercase text-sm mb-1">Evite o Erro 400 (Bad Request)</h3>
+                <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                  Certifique-se que seu banco Supabase possui as tabelas abaixo. Se notar erros ao salvar, execute este script no SQL Editor.
+                </p>
+              </div>
+            </div>
+            <div className="relative">
+              <pre className="bg-slate-900 text-emerald-400 p-6 rounded-3xl text-[10px] font-mono overflow-x-auto h-[350px] border-4 border-slate-800">
+                {SQL_SCHEMA}
+              </pre>
+              <button 
+                onClick={() => { navigator.clipboard.writeText(SQL_SCHEMA); alert("SQL Copiado!"); }}
+                className="absolute top-4 right-4 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[10px] font-black uppercase backdrop-blur-md border border-white/20"
+              >
+                Copiar SQL
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CADASTRO DE MOTIVOS */}
         {activeSubTab === 'reasons' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -75,64 +166,142 @@ const Settings: React.FC<SettingsProps> = ({
               {reasons.map(r => (
                 <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200">
                   <span className="font-black uppercase text-xs text-slate-700 tracking-tight">{r.label}</span>
-                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveReason(r.id); }} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* TAB: BASE CRÍTICA */}
+        {/* CADASTRO DE FILIAIS */}
+        {activeSubTab === 'branches' && (
+          <div className="space-y-8 max-w-4xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-1"><input placeholder="ID (ex: sp-01)" value={temp.bid || ''} onChange={e => setTemp({...temp, bid: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white" /></div>
+                <div className="col-span-1"><input placeholder="Nome da Unidade" value={temp.bname || ''} onChange={e => setTemp({...temp, bname: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white" /></div>
+                <div className="col-span-2"><input placeholder="Localização / Endereço" value={temp.bloc || ''} onChange={e => setTemp({...temp, bloc: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white" /></div>
+                <button onClick={() => { onAddBranch({id: temp.bid, name: temp.bname, location: temp.bloc}); setTemp({}); }} className="col-span-2 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar Filial</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {branches.map(b => (
+                <div key={b.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white">
+                  <div>
+                    <p className="font-black uppercase text-xs text-indigo-600">{b.id}</p>
+                    <p className="font-bold text-sm text-slate-800">{b.name}</p>
+                  </div>
+                  <button onClick={() => onRemoveBranch(b.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CADASTRO DE FROTA (VEÍCULOS) */}
+        {activeSubTab === 'vehicles' && (
+          <div className="space-y-8 max-w-4xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <div className="grid grid-cols-3 gap-4">
+                <input placeholder="Placa" value={temp.vplate || ''} onChange={e => setTemp({...temp, vplate: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white uppercase" />
+                <input placeholder="Modelo" value={temp.vmodel || ''} onChange={e => setTemp({...temp, vmodel: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                <select value={temp.vbranch || ''} onChange={e => setTemp({...temp, vbranch: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
+                  <option value="">Filial...</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <button onClick={() => { onAddVehicle({id: `VEC-${Date.now()}`, plate: temp.vplate, model: temp.vmodel, capacity: 'N/I', branchId: temp.vbranch}); setTemp({}); }} className="col-span-3 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar Veículo</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {vehicles.map(v => (
+                <div key={v.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs uppercase">{v.plate.slice(-2)}</div>
+                    <div>
+                      <p className="font-black uppercase text-xs text-slate-800">{v.plate}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{v.model}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => onRemoveVehicle(v.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CADASTRO DE EQUIPE (MOTORISTAS) */}
+        {activeSubTab === 'drivers' && (
+          <div className="space-y-8 max-w-4xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <div className="grid grid-cols-2 gap-4">
+                <input placeholder="Nome Completo" value={temp.dname || ''} onChange={e => setTemp({...temp, dname: e.target.value})} className="col-span-2 p-4 rounded-2xl border font-bold text-sm bg-white uppercase" />
+                <select value={temp.dbranch || ''} onChange={e => setTemp({...temp, dbranch: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
+                  <option value="">Filial...</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <input placeholder="Tipo CNH (ex: D)" value={temp.dcnh || ''} onChange={e => setTemp({...temp, dcnh: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white uppercase" />
+                <button onClick={() => { onAddDriver({id: `DRV-${Date.now()}`, name: temp.dname, branchId: temp.dbranch, licenseType: temp.dcnh || 'D', status: 'Ativo'}); setTemp({}); }} className="col-span-2 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar Motorista</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {drivers.map(d => (
+                <div key={d.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center font-black text-xs uppercase">{d.name.charAt(0)}</div>
+                    <div>
+                      <p className="font-black uppercase text-xs text-slate-800">{d.name}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">CNH {d.licenseType} • {branches.find(b => b.id === d.branchId)?.name}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => onRemoveDriver(d.id)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CADASTRO DE CLIENTES CRÍTICOS */}
         {activeSubTab === 'critical-base' && (
           <div className="space-y-8 max-w-5xl">
-            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 grid grid-cols-3 gap-6 items-end shadow-inner">
-              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Matrícula Cliente</label><input value={temp.cid || ''} onChange={e => setTemp({...temp, cid: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-sm bg-white" placeholder="MAT-100" /></div>
-              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Status de Risco</label>
-                <select value={temp.cstatus || 'Retorno'} onChange={e => setTemp({...temp, cstatus: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-xs bg-white">
-                  <option value="Retorno">Retorno Recorrente</option>
-                  <option value="Pendência">Pendência Financeira</option>
-                  <option value="Reclamação">Reclamação Constante</option>
-                  <option value="Restrição de Horário">Restrição de Horário</option>
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <div className="grid grid-cols-4 gap-4">
+                <input placeholder="Matrícula" value={temp.ccid || ''} onChange={e => setTemp({...temp, ccid: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white uppercase" />
+                <select value={temp.cstatus || ''} onChange={e => setTemp({...temp, cstatus: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
+                  <option value="Retorno">Retorno</option>
+                  <option value="Pendência">Pendência</option>
+                  <option value="Reclamação">Reclamação</option>
                 </select>
-              </div>
-              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nível de Risco</label>
-                <select value={temp.crisk || 'medium'} onChange={e => setTemp({...temp, crisk: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-xs bg-white">
-                  <option value="low">Baixo</option>
-                  <option value="medium">Médio</option>
-                  <option value="high">Alto</option>
+                <select value={temp.crisk || 'low'} onChange={e => setTemp({...temp, crisk: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white">
+                  <option value="low">Risco Baixo</option>
+                  <option value="medium">Risco Médio</option>
+                  <option value="high">Risco Alto</option>
                 </select>
+                <button onClick={() => { onAddCritical({customerId: temp.ccid, returnCount: 0, complaintCount: 0, notes: temp.cnotes, status: temp.cstatus as any, riskLevel: temp.crisk as any, resolutionStatus: 'Pendente', registrationDate: new Date().toLocaleDateString('pt-BR')}); setTemp({}); }} className="py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar</button>
+                <textarea placeholder="Notas e Histórico do Cliente..." value={temp.cnotes || ''} onChange={e => setTemp({...temp, cnotes: e.target.value})} className="col-span-4 h-24 p-4 rounded-2xl border font-bold text-sm bg-white" />
               </div>
-              <div className="col-span-3"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Notas Críticas</label><input value={temp.cnotes || ''} onChange={e => setTemp({...temp, cnotes: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-white" placeholder="Ex: Cliente recusa descarga sem ajudante" /></div>
-              <button onClick={() => { onAddCritical({customerId: temp.cid, status: temp.cstatus || 'Retorno', notes: temp.cnotes, riskLevel: temp.crisk || 'medium', returnCount: 0, complaintCount: 0, resolutionStatus: 'Pendente', registrationDate: new Date().toLocaleDateString('pt-BR')}); setTemp({}); }} className="col-span-3 h-14 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:bg-rose-700 transition-all">Salvar Cliente Crítico</button>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               {customerDatabase.map(c => (
-                <div key={c.customerId} className={`p-6 border-2 rounded-3xl flex flex-col justify-between bg-white ${c.riskLevel === 'high' ? 'border-rose-100' : 'border-slate-50'}`}>
+                <div key={c.customerId} className={`p-5 border rounded-3xl flex items-center justify-between bg-white ${c.riskLevel === 'high' ? 'border-l-4 border-rose-500' : ''}`}>
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                       <span className="text-sm font-black text-slate-800 uppercase">{c.customerId}</span>
-                       <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${c.riskLevel === 'high' ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'}`}>{c.status}</span>
-                    </div>
-                    <p className="text-xs text-slate-400 italic font-medium">"{c.notes}"</p>
+                    <p className="font-black uppercase text-xs text-indigo-600">{c.customerId}</p>
+                    <p className="font-bold text-sm text-slate-800">{c.status}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold">{c.notes?.slice(0, 50)}...</p>
                   </div>
-                  <div className="mt-4 flex justify-between items-center border-t pt-4">
-                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{c.registrationDate}</span>
-                    <button onClick={() => { if(window.confirm("Remover?")) onRemoveCritical(c.customerId); }} className="text-rose-300 hover:text-rose-600"><i className="fas fa-trash-can"></i></button>
-                  </div>
+                  <button onClick={() => onRemoveCritical(c.customerId)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* TAB: VENDEDORES */}
+        {/* CADASTRO DE VENDEDORES (MAPPINGS) */}
         {activeSubTab === 'mappings' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex items-center gap-4 mb-2">
               <button onClick={() => setMappingMode('individual')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'individual' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Manual</button>
               <button onClick={() => setMappingMode('bulk')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${mappingMode === 'bulk' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Inserir Massa (Planilha)</button>
             </div>
-
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner">
               {mappingMode === 'individual' ? (
                 <div className="grid grid-cols-3 gap-6 items-end">
@@ -144,112 +313,33 @@ const Settings: React.FC<SettingsProps> = ({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center px-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Layout de Planilha (Copiar e Colar)</label>
-                    <span className="text-[9px] font-bold text-indigo-400">MATRÍCULA ; NOME_CLIENTE ; CÓD.VENDEDOR ; NOME_VENDEDOR ; WHATSAPP</span>
-                  </div>
                   <textarea value={temp.bulkText || ''} onChange={e => setTemp({...temp, bulkText: e.target.value})} className="w-full h-48 p-4 rounded-2xl border font-mono text-xs bg-white resize-none" placeholder="MAT-101 ; João Silva ; VD-01 ; Pedro Rocha ; 5511999999999" />
-                  <button onClick={handleBulkMappings} className="w-full h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Processar Inserção em Massa</button>
+                  <button onClick={()=>{
+                    if(!temp.bulkText) return;
+                    const lines = temp.bulkText.split('\n').filter((l:string)=>l.trim());
+                    const mappings = lines.map((l:string)=>{
+                      const p = l.split(';').map(v=>v.trim());
+                      return { customerId: p[0], sellerCode: p[2] || 'VD-00', sellerName: p[3] || 'Vendedor', sellerPhone: p[4] || '', customerName: p[1] || 'Cliente' };
+                    });
+                    onBulkAddMappings(mappings);
+                    setTemp({});
+                  }} className="w-full h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Processar Massa</button>
                 </div>
               )}
             </div>
-
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {clientMappings.map(m => (
                 <div key={m.customerId} className="p-6 border rounded-3xl flex justify-between items-center bg-white shadow-sm">
                   <div>
                     <p className="font-black text-indigo-600 text-[10px] uppercase">CLIENTE: {m.customerId}</p>
                     <p className="font-bold text-slate-800 uppercase text-xs mt-1">{m.sellerName}</p>
-                    <p className="text-[9px] font-black text-emerald-500 mt-1">{m.sellerPhone}</p>
                   </div>
-                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveMapping(m.customerId); }} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveMapping(m.customerId)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
-
-        {/* TAB: FILIAIS */}
-        {activeSubTab === 'branches' && (
-          <div className="space-y-6 max-w-4xl">
-            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 flex gap-4 items-end shadow-inner">
-               <div className="flex-1">
-                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome da Filial</label>
-                 <input value={temp.bname || ''} onChange={e => setTemp({...temp, bname: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-sm bg-white" placeholder="Ex: Filial Curitiba" />
-               </div>
-               <button onClick={() => { onAddBranch({id: `B-${Date.now()}`, name: temp.bname, location: 'BR'}); setTemp({}); }} disabled={!temp.bname} className="h-14 px-8 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {branches.map(b => (
-                <div key={b.id} className="p-6 border rounded-3xl flex items-center justify-between bg-white group hover:border-indigo-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black"><i className="fas fa-building text-xs"></i></div>
-                    <span className="font-black uppercase text-xs text-slate-800">{b.name}</span>
-                  </div>
-                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveBranch(b.id); }} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-2"><i className="fas fa-trash-can"></i></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB: FROTA */}
-        {activeSubTab === 'vehicles' && (
-          <div className="space-y-6 max-w-4xl">
-            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 grid grid-cols-2 gap-6 items-end">
-              <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Placa</label><input value={temp.vplate || ''} onChange={e => setTemp({...temp, vplate: e.target.value})} className="w-full p-4 rounded-2xl border uppercase font-bold text-sm bg-white" placeholder="ABC-1234" /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Filial</label>
-                <select value={temp.vbranch || ''} onChange={e => setTemp({...temp, vbranch: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-xs bg-white">
-                  <option value="">Selecione...</option>
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <button onClick={() => { onAddVehicle({id: `V-${Date.now()}`, plate: temp.vplate, branchId: temp.vbranch, model: 'Logística', capacity: 'G'}); setTemp({}); }} className="col-span-2 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Cadastrar Veículo</button>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-              {vehicles.map(v => (
-                <div key={v.id} className="p-6 border rounded-3xl flex items-center justify-between bg-white shadow-sm hover:border-indigo-100">
-                  <div>
-                    <p className="font-black text-slate-800 uppercase text-xs">{v.plate}</p>
-                    <p className="text-[9px] font-black text-indigo-500 uppercase mt-1">{branches.find(b => b.id === v.branchId)?.name || 'N/I'}</p>
-                  </div>
-                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveVehicle(v.id); }} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB: EQUIPE */}
-        {activeSubTab === 'drivers' && (
-          <div className="space-y-6 max-w-5xl">
-            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 grid grid-cols-2 gap-6 items-end shadow-inner">
-              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome do Motorista</label><input value={temp.dname || ''} onChange={e => setTemp({...temp, dname: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-sm bg-white" /></div>
-              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Filial</label>
-                <select value={temp.dbranch || ''} onChange={e => setTemp({...temp, dbranch: e.target.value})} className="w-full p-4 rounded-2xl border font-bold uppercase text-xs bg-white">
-                  <option value="">Selecione...</option>
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <button onClick={() => { onAddDriver({id: `DRV-${Date.now()}`, name: temp.dname, branchId: temp.dbranch, status: 'Ativo', licenseType: 'D'}); setTemp({}); }} className="col-span-2 h-14 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Registrar Motorista</button>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-              {drivers.map(d => (
-                <div key={d.id} className="p-6 border rounded-3xl flex items-center justify-between bg-white shadow-sm hover:border-indigo-100 group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 text-xs">{d.name.charAt(0)}</div>
-                    <div>
-                      <p className="font-black text-slate-800 uppercase text-xs">{d.name}</p>
-                      <p className="text-[9px] font-black text-slate-400 uppercase mt-1">{branches.find(b => b.id === d.branchId)?.name || 'N/I'}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => { if(window.confirm("Remover?")) onRemoveDriver(d.id); }} className="text-slate-200 hover:text-rose-500 p-2 opacity-0 group-hover:opacity-100"><i className="fas fa-trash-can"></i></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
       </div>
     </div>
   );

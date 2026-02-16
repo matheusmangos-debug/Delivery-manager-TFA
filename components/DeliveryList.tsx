@@ -65,10 +65,13 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
       if (extractedData && extractedData.length > 0) {
         const formatted = extractedData.map((item: any) => ({
           ...item,
-          id: `D-${Math.random().toString(36).substr(2, 9)}`,
+          customerId: item.customerId || `MAT-${Math.floor(Math.random() * 10000)}`,
+          customerName: item.customerName || 'Cliente Importado',
           status: DeliveryStatus.PENDING,
           branch: selectedBranch === 'all' ? 'sp-01' : selectedBranch,
-          date: item.date || new Date().toLocaleDateString('pt-BR')
+          date: item.date || new Date().toISOString().split('T')[0],
+          boxQuantity: parseInt(item.boxQuantity || 1),
+          address: item.address || 'Endereço não identificado'
         }));
         onAddDeliveries(formatted);
         setShowImportModal(false);
@@ -91,8 +94,7 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
       const newItems = lines.map(line => {
         const parts = line.split('\t').length > 1 ? line.split('\t') : line.split(';');
         return {
-          id: `D-${Math.random().toString(36).substr(2, 9)}`,
-          customerId: parts[0]?.trim() || 'MAT-000',
+          customerId: parts[0]?.trim() || `MAT-${Math.floor(Math.random() * 1000)}`,
           customerName: parts[1]?.trim() || 'Cliente Manual',
           driverName: parts[2]?.trim() || 'Motorista N/I',
           boxQuantity: parseInt(parts[3]) || 1,
@@ -110,11 +112,10 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
         return;
       }
       const newItem = {
-        id: `D-${Date.now()}`,
         ...individualForm,
         status: DeliveryStatus.PENDING,
         trackingCode: `MN-${Math.floor(1000 + Math.random() * 9000)}`,
-        address: 'Endereço Manual',
+        address: individualForm.address || 'Endereço Manual',
         branch: selectedBranch === 'all' ? 'sp-01' : selectedBranch
       };
       onAddDeliveries([newItem as Delivery]);
@@ -285,7 +286,7 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
                   <span>Layout de Colunas</span>
                   <span className="text-indigo-500">Matrícula ; Cliente ; Motorista ; Volumes ; Data</span>
                 </div>
-                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none" placeholder="MAT-101 ; João Silva ; Márcio ; 10 ; 22/10/2023" />
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none" placeholder="MAT-101 ; João Silva ; Márcio ; 10 ; 2023-10-22" />
                 <button onClick={handleManualImport} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Processar Manual</button>
               </div>
             ) : (
