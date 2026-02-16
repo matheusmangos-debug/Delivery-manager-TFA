@@ -1,14 +1,20 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// URL do projeto atualizada conforme solicitado
+// URL do seu projeto Supabase (CORRETA)
 const SUPABASE_URL = 'https://cpxtorqsurwquxycmxzg.supabase.co';
 
-// Chave ANON KEY atualizada conforme fornecido (Nota: Chaves Supabase geralmente começam com 'eyJ')
-const SUPABASE_ANON_KEY = 'sb_publishable__X_ayE62nu5SQ9u2F2xMFw_xAIQFUcF';
+/**
+ * AVISO IMPORTANTE: 
+ * A chave que você forneceu anteriormente ('sb_publishable...') é do STRIPE.
+ * O Supabase não aceitará essa chave. 
+ * Você deve buscar a chave que começa com 'eyJ...' em:
+ * Project Settings > API > anon (public)
+ */
+const SUPABASE_ANON_KEY = 'sb_publishable__X_ayE62nu5SQ9u2F2xMFw_xAIQFUcF'; // SUBSTITUA POR UMA QUE COMECE COM 'eyJ'
 
 if (!SUPABASE_ANON_KEY.startsWith('eyJ')) {
-  console.warn("AVISO: A chave fornecida não parece ser uma chave válida do Supabase (JWT). Se o sistema não conectar, verifique a chave 'anon public' no painel do Supabase.");
+  console.error("ERRO DE CONEXÃO: A chave 'SUPABASE_ANON_KEY' é inválida. Ela deve começar com 'eyJ'. O sistema não conseguirá salvar dados até que isso seja corrigido.");
 }
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
