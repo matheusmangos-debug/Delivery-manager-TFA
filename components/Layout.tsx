@@ -6,6 +6,7 @@ interface LayoutProps {
   children: React.ReactNode;
   user: User;
   activeTab: string;
+  dbStatus?: 'connecting' | 'online' | 'offline';
   onTabChange: (tab: any) => void;
   selectedBranch: string;
   onBranchChange: (branchId: string) => void;
@@ -15,11 +16,12 @@ interface LayoutProps {
   onCustomDateChange: (date: string) => void;
   branches: Branch[];
   onLogout: () => void;
+  onRefresh?: () => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({ 
-  children, user, activeTab, onTabChange, selectedBranch, onBranchChange,
-  filterRange, onFilterRangeChange, customDate, onCustomDateChange, branches, onLogout
+  children, user, activeTab, dbStatus = 'online', onTabChange, selectedBranch, onBranchChange,
+  filterRange, onFilterRangeChange, customDate, onCustomDateChange, branches, onLogout, onRefresh
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie' },
@@ -35,19 +37,43 @@ const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden animate-in fade-in duration-500">
       <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-30">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-600/20">
-            <i className="fas fa-box-open text-xl"></i>
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-600/20">
+              <i className="fas fa-box-open text-xl"></i>
+            </div>
+            <span className="text-xl font-bold tracking-tight">SwiftLog</span>
           </div>
-          <span className="text-xl font-bold tracking-tight">SwiftLog <span className="text-indigo-400">Pro</span></span>
+          {onRefresh && (
+            <button onClick={onRefresh} className="text-slate-500 hover:text-white transition-colors">
+              <i className={`fas fa-sync-alt text-xs ${dbStatus === 'connecting' ? 'animate-spin' : ''}`}></i>
+            </button>
+          )}
         </div>
-        <nav className="flex-1 mt-6 px-4">
-          <ul className="space-y-2">
+        
+        {/* Status da Conexão */}
+        <div className="px-6 mb-4">
+           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${
+             dbStatus === 'online' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 
+             dbStatus === 'offline' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 
+             'bg-amber-500/10 border-amber-500/20 text-amber-400'
+           }`}>
+             <span className={`w-1.5 h-1.5 rounded-full ${
+               dbStatus === 'online' ? 'bg-emerald-400 animate-pulse' : 
+               dbStatus === 'offline' ? 'bg-rose-400' : 
+               'bg-amber-400 animate-bounce'
+             }`}></span>
+             {dbStatus === 'online' ? 'Banco de Dados Online' : dbStatus === 'offline' ? 'Banco Desconectado' : 'Conectando Banco...'}
+           </div>
+        </div>
+
+        <nav className="flex-1 mt-2 px-4">
+          <ul className="space-y-1">
             {menuItems.map((item) => (
               <li key={item.id}>
                 <button onClick={() => onTabChange(item.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                  <i className={`fas ${item.icon} w-5`}></i>
-                  <span className="font-medium text-sm">{item.label}</span>
+                  <i className={`fas ${item.icon} w-5 text-sm`}></i>
+                  <span className="font-medium text-xs">{item.label}</span>
                 </button>
               </li>
             ))}

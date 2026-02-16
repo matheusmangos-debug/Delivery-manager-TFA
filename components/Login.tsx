@@ -6,9 +6,10 @@ interface LoginProps {
   onLogin: (user: User) => void;
   onRegister: (user: User) => void;
   existingUsers: User[];
+  dbStatus?: 'connecting' | 'online' | 'offline';
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers, dbStatus = 'online' }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,21 +20,25 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers }) => 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (dbStatus === 'offline') {
+      setError('O sistema está offline. Verifique a URL do Supabase e as chaves de API no arquivo services/supabase.ts.');
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
-    // Simulação de delay para feedback visual
     setTimeout(() => {
       if (mode === 'login') {
         const user = existingUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
         if (user) {
           onLogin(user);
         } else {
-          setError('Email ou senha incorretos. Apenas usuários cadastrados podem acessar.');
+          setError('Email ou senha incorretos. Apenas usuários cadastrados no banco de dados podem acessar.');
           setIsLoading(false);
         }
       } else {
-        // Modo Cadastro
         const emailExists = existingUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
         if (emailExists) {
           setError('Este email já está cadastrado no sistema.');
@@ -61,12 +66,18 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers }) => 
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 p-6 relative overflow-hidden">
-      {/* Background Decorative Elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/20 blur-[120px] rounded-full animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-emerald-600/10 blur-[120px] rounded-full animate-pulse delay-700"></div>
 
       <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-8 duration-700">
         <div className="bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-10 relative overflow-hidden">
+          
+          {/* Badge de Status do Banco */}
+          <div className={`absolute top-0 right-0 left-0 h-1 transition-colors ${
+            dbStatus === 'online' ? 'bg-emerald-500' : 
+            dbStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-500'
+          }`}></div>
+
           <div className="flex flex-col items-center mb-10 text-center">
             <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl mb-6 shadow-xl shadow-indigo-200 rotate-3 transition-transform hover:rotate-0 cursor-default">
               <i className="fas fa-box-open"></i>
@@ -108,25 +119,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers }) => 
               </div>
             </div>
 
-            {mode === 'register' && (
-              <div className="animate-in slide-in-from-left-4 duration-300 delay-100">
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Cargo / Função</label>
-                <div className="relative">
-                  <i className="fas fa-user-tag absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
-                  <select 
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all font-bold text-sm text-slate-700 appearance-none cursor-pointer"
-                  >
-                    <option>Operador de Logística</option>
-                    <option>Gerente de Operações</option>
-                    <option>Administrador</option>
-                    <option>Faturamento</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
             <div className="animate-in slide-in-from-left-4 duration-300 delay-150">
               <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Senha</label>
               <div className="relative">
@@ -151,10 +143,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers }) => 
 
             <button 
               type="submit" 
-              disabled={isLoading}
-              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 disabled:hover:scale-100 mt-2 flex items-center justify-center gap-2"
+              disabled={isLoading || dbStatus === 'connecting'}
+              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 mt-2 flex items-center justify-center gap-2"
             >
-              {isLoading ? (
+              {isLoading || dbStatus === 'connecting' ? (
                 <i className="fas fa-circle-notch animate-spin"></i>
               ) : (
                 mode === 'login' ? 'Acessar Sistema' : 'Criar minha Conta'
@@ -169,9 +161,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, existingUsers }) => 
             >
               {mode === 'login' ? 'Não tem uma conta? Cadastre-se' : 'Já possui conta? Faça Login'}
             </button>
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight italic">
-              Ambiente Seguro & Criptografado
-            </p>
+            <div className="flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full ${dbStatus === 'online' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight italic">
+                {dbStatus === 'online' ? 'Banco de Dados Conectado' : 'Aguardando Banco de Dados...'}
+              </p>
+            </div>
           </div>
         </div>
 

@@ -1,8 +1,15 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://rvzcixwhkkrlnesbcdke.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_sq-FD_5lsQ7Qol6Iv3DyCQ_PLBNfg5s';
+// URL do projeto atualizada conforme solicitado
+const SUPABASE_URL = 'https://cpxtorqsurwquxycmxzg.supabase.co';
+
+// Chave ANON KEY atualizada conforme fornecido (Nota: Chaves Supabase geralmente começam com 'eyJ')
+const SUPABASE_ANON_KEY = 'sb_publishable__X_ayE62nu5SQ9u2F2xMFw_xAIQFUcF';
+
+if (!SUPABASE_ANON_KEY.startsWith('eyJ')) {
+  console.warn("AVISO: A chave fornecida não parece ser uma chave válida do Supabase (JWT). Se o sistema não conectar, verifique a chave 'anon public' no painel do Supabase.");
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'deliveries' | 'returns' | 'analytics' | 'ai' | 'team' | 'settings' | 'critical-clients'>('dashboard');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [dbStatus, setDbStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
   
   const [filterRange, setFilterRange] = useState<DateFilterRange>('today');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -31,18 +32,18 @@ const App: React.FC = () => {
   const [clientMappings, setClientMappings] = useState<ClientMapping[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
-  // Carregamento Inicial do Supabase
   const fetchAllData = async () => {
+    setDbStatus('connecting');
     try {
       const [
-        { data: delivs },
-        { data: brnchs },
-        { data: rsns },
-        { data: drvrs },
-        { data: vhcls },
-        { data: crit },
-        { data: maps },
-        { data: usrs }
+        { data: delivs, error: e1 },
+        { data: brnchs, error: e2 },
+        { data: rsns, error: e3 },
+        { data: drvrs, error: e4 },
+        { data: vhcls, error: e5 },
+        { data: crit, error: e6 },
+        { data: maps, error: e7 },
+        { data: usrs, error: e8 }
       ] = await Promise.all([
         db.deliveries().select('*').order('created_at', { ascending: false }),
         db.branches().select('*'),
@@ -54,6 +55,11 @@ const App: React.FC = () => {
         db.users().select('*')
       ]);
 
+      if (e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8) {
+        console.error("Erro ao carregar tabelas:", { e1, e2, e3, e4, e5, e6, e7, e8 });
+        throw new Error("Falha na resposta do Supabase");
+      }
+
       if (delivs) setDeliveries(delivs);
       if (brnchs) setBranches(brnchs);
       if (rsns) setReasons(rsns);
@@ -62,8 +68,11 @@ const App: React.FC = () => {
       if (crit) setCustomerDatabase(crit);
       if (maps) setClientMappings(maps);
       if (usrs) setUsers(usrs);
+      
+      setDbStatus('online');
     } catch (err) {
       console.error("Erro crítico de conexão com Supabase:", err);
+      setDbStatus('offline');
     }
   };
 
@@ -83,10 +92,8 @@ const App: React.FC = () => {
     if (selectedBranch !== 'all') {
       base = base.filter(d => d.branch === selectedBranch);
     }
-
     const today = new Date();
     today.setHours(0,0,0,0);
-
     const parseDate = (dStr: string) => {
       if (!dStr) return new Date();
       const parts = dStr.split('/');
@@ -95,11 +102,9 @@ const App: React.FC = () => {
       }
       return new Date(dStr);
     };
-
     return base.filter(d => {
       const deliveryDate = parseDate(d.date);
       deliveryDate.setHours(0,0,0,0);
-
       if (filterRange === 'today') return deliveryDate.getTime() === today.getTime();
       if (filterRange === 'weekly') {
         const weekAgo = new Date(today);
@@ -115,109 +120,125 @@ const App: React.FC = () => {
     });
   }, [deliveries, selectedBranch, filterRange, customDate]);
 
-  // Handlers Persistentes com Reversão de Erro
   const updateDelivery = async (id: string, updates: Partial<Delivery>) => {
     const { error } = await db.deliveries().update(updates).eq('id', id);
-    if (!error) {
-      setDeliveries(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    if (error) {
+      alert(`Erro ao atualizar entrega: ${error.message}`);
     } else {
-      alert("Falha ao atualizar no banco de dados.");
+      setDeliveries(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
     }
   };
 
   const bulkUpdateStatus = async (ids: string[], status: DeliveryStatus) => {
     const { error } = await db.deliveries().update({ status }).in('id', ids);
-    if (!error) {
+    if (error) {
+      alert(`Erro na atualização em massa: ${error.message}`);
+    } else {
       setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d));
     }
   };
 
   const deleteDeliveries = async (ids: string[]) => {
     const { error } = await db.deliveries().delete().in('id', ids);
-    if (!error) {
+    if (error) {
+      alert(`Erro ao excluir: ${error.message}`);
+    } else {
       setDeliveries(prev => prev.filter(d => !ids.includes(d.id)));
     }
   };
 
   const addDeliveries = async (newOnes: any[]) => {
     const { data, error } = await db.deliveries().insert(newOnes).select();
-    if (!error && data) {
+    if (error) {
+      alert(`Erro ao salvar no banco: ${error.message}`);
+      console.error("Payload enviado:", newOnes);
+    } else if (data) {
       setDeliveries(prev => [...data, ...prev]);
-    } else {
-      console.error(error);
-      alert("Erro ao inserir entregas. Verifique sua conexão.");
     }
   };
 
-  // Configurações e Gerenciamento de Equipe
   const addBranch = async (branch: Branch) => {
     const { error } = await db.branches().insert([branch]);
-    if (!error) setBranches(prev => [...prev, branch]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setBranches(prev => [...prev, branch]);
   };
 
   const removeBranch = async (id: string) => {
     const { error } = await db.branches().delete().eq('id', id);
-    if (!error) setBranches(prev => prev.filter(b => b.id !== id));
+    if (error) alert(`Erro: ${error.message}`);
+    else setBranches(prev => prev.filter(b => b.id !== id));
   };
 
   const addDriver = async (driver: Driver) => {
     const { error } = await db.drivers().insert([driver]);
-    if (!error) setDrivers(prev => [...prev, driver]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setDrivers(prev => [...prev, driver]);
   };
 
   const removeDriver = async (id: string) => {
     const { error } = await db.drivers().delete().eq('id', id);
-    if (!error) setDrivers(prev => prev.filter(d => d.id !== id));
+    if (error) alert(`Erro: ${error.message}`);
+    else setDrivers(prev => prev.filter(d => d.id !== id));
   };
 
   const addVehicle = async (vehicle: Vehicle) => {
     const { error } = await db.vehicles().insert([vehicle]);
-    if (!error) setVehicles(prev => [...prev, vehicle]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setVehicles(prev => [...prev, vehicle]);
   };
 
   const removeVehicle = async (id: string) => {
     const { error } = await db.vehicles().delete().eq('id', id);
-    if (!error) setVehicles(prev => prev.filter(v => v.id !== id));
+    if (error) alert(`Erro: ${error.message}`);
+    else setVehicles(prev => prev.filter(v => v.id !== id));
   };
 
   const addReason = async (reason: ReturnReason) => {
     const { error } = await db.reasons().insert([reason]);
-    if (!error) setReasons(prev => [...prev, reason]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setReasons(prev => [...prev, reason]);
   };
 
   const removeReason = async (id: string) => {
     const { error } = await db.reasons().delete().eq('id', id);
-    if (!error) setReasons(prev => prev.filter(r => r.id !== id));
+    if (error) alert(`Erro: ${error.message}`);
+    else setReasons(prev => prev.filter(r => r.id !== id));
   };
 
   const addMapping = async (mapping: ClientMapping) => {
     const { error } = await db.mappings().insert([mapping]);
-    if (!error) setClientMappings(prev => [...prev, mapping]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setClientMappings(prev => [...prev, mapping]);
   };
 
   const bulkAddMappings = async (mappings: ClientMapping[]) => {
     const { error } = await db.mappings().insert(mappings);
-    if (!error) setClientMappings(prev => [...prev, ...mappings]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setClientMappings(prev => [...prev, ...mappings]);
   };
 
   const removeMapping = async (id: string) => {
     const { error } = await db.mappings().delete().eq('customerId', id);
-    if (!error) setClientMappings(prev => prev.filter(m => m.customerId !== id));
+    if (error) alert(`Erro: ${error.message}`);
+    else setClientMappings(prev => prev.filter(m => m.customerId !== id));
   };
 
   const addCritical = async (critical: CustomerReputation) => {
     const { error } = await db.critical_base().insert([critical]);
-    if (!error) setCustomerDatabase(prev => [...prev, critical]);
+    if (error) alert(`Erro: ${error.message}`);
+    else setCustomerDatabase(prev => [...prev, critical]);
   };
 
   const removeCritical = async (id: string) => {
     const { error } = await db.critical_base().delete().eq('customerId', id);
-    if (!error) setCustomerDatabase(prev => prev.filter(c => c.customerId !== id));
+    if (error) alert(`Erro: ${error.message}`);
+    else setCustomerDatabase(prev => prev.filter(c => c.customerId !== id));
   };
 
   if (!currentUser) {
     return (
       <Login 
+        dbStatus={dbStatus}
         onLogin={(user) => { 
           setCurrentUser(user); 
           localStorage.setItem('swiftlog_current_session', JSON.stringify(user)); 
@@ -229,7 +250,7 @@ const App: React.FC = () => {
             localStorage.setItem('swiftlog_current_session', JSON.stringify(u));
             fetchAllData();
           } else {
-            alert("Erro ao criar usuário no Supabase.");
+            alert(`Erro ao criar usuário: ${error.message}`);
           }
         }} 
         existingUsers={users} 
@@ -241,6 +262,7 @@ const App: React.FC = () => {
     <Layout 
       user={currentUser}
       activeTab={activeTab} 
+      dbStatus={dbStatus}
       onTabChange={setActiveTab}
       selectedBranch={selectedBranch}
       onBranchChange={setSelectedBranch}
@@ -250,6 +272,7 @@ const App: React.FC = () => {
       onCustomDateChange={setCustomDate}
       branches={branches}
       onLogout={() => { setCurrentUser(null); localStorage.removeItem('swiftlog_current_session'); }}
+      onRefresh={fetchAllData}
     >
       {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
       {activeTab === 'deliveries' && (
@@ -273,7 +296,8 @@ const App: React.FC = () => {
           filterDate={customDate}
           onUpdateClient={async (cid, upds) => {
              const { error } = await db.critical_base().update(upds).eq('customerId', cid);
-             if (!error) setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c));
+             if (error) alert(`Erro: ${error.message}`);
+             else setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c));
           }} 
         />
       )}
@@ -284,7 +308,8 @@ const App: React.FC = () => {
           drivers={drivers} 
           onBulkUpdateStatus={async (ids, s) => {
              const { error } = await db.drivers().update({ manualStatus: s }).in('id', ids);
-             if (!error) setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d));
+             if (error) alert(`Erro: ${error.message}`);
+             else setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d));
           }} 
         />
       )}
