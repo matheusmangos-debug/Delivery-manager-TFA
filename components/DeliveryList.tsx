@@ -8,6 +8,7 @@ interface DeliveryListProps {
   deliveries: Delivery[];
   onUpdate: (id: string, updates: Partial<Delivery>) => void;
   onBulkUpdate: (ids: string[], status: DeliveryStatus) => void;
+  onBulkUpdateDate?: (ids: string[], date: string) => void;
   onAddDeliveries: (deliveries: any[]) => void;
   onDeleteDeliveries: (ids: string[]) => void;
   returnReasons: ReturnReason[];
@@ -16,7 +17,7 @@ interface DeliveryListProps {
 }
 
 const DeliveryList: React.FC<DeliveryListProps> = ({ 
-  selectedBranch, deliveries, onUpdate, onBulkUpdate, onAddDeliveries, onDeleteDeliveries, 
+  selectedBranch, deliveries, onUpdate, onBulkUpdate, onBulkUpdateDate, onAddDeliveries, onDeleteDeliveries, 
   returnReasons, customerHistory, clientMappings
 }) => {
   const [filter, setFilter] = useState<string>('all');
@@ -26,14 +27,15 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
   
   // Modal states
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importMode, setImportMode] = useState<'bulk' | 'individual' | 'ai'>('ai');
+  const [importMode, setImportMode] = useState<'bulk' | 'individual' | 'ai' | 'pdf'>('ai');
   const [importText, setImportText] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   
   // Edit & Individual Form states
   const [editTarget, setEditTarget] = useState<Delivery | null>(null);
   const [individualForm, setIndividualForm] = useState<Partial<Delivery>>({
-    customerId: '', customerName: '', driverName: '', boxQuantity: 1, date: new Date().toLocaleDateString('pt-BR')
+    customerId: '', customerName: '', driverName: '', boxQuantity: 1
   });
   
   const [returnModalTarget, setReturnModalTarget] = useState<Delivery | null>(null);
@@ -62,23 +64,7 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
     setIsAiProcessing(true);
     try {
       const extractedData = await GeminiService.parseSpreadsheetText(importText);
-      if (extractedData && extractedData.length > 0) {
-        const formatted = extractedData.map((item: any) => ({
-          ...item,
-          customerId: item.customerId || `MAT-${Math.floor(Math.random() * 10000)}`,
-          customerName: item.customerName || 'Cliente Importado',
-          status: DeliveryStatus.PENDING,
-          branch: selectedBranch === 'all' ? 'sp-01' : selectedBranch,
-          date: item.date || new Date().toISOString().split('T')[0],
-          boxQuantity: parseInt(item.boxQuantity || 1),
-          address: item.address || 'Endereço não identificado'
-        }));
-        onAddDeliveries(formatted);
-        setShowImportModal(false);
-        setImportText('');
-      } else {
-        alert("A IA não conseguiu identificar dados válidos no texto.");
-      }
+      processExtractedData(extractedData);
     } catch (err) {
       console.error(err);
       alert("Erro ao processar com IA.");
@@ -87,7 +73,49 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
     }
   };
 
+  const handlePdfImport = async () => {
+    if (!pdfFile) return;
+    setIsAiProcessing(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const extractedData = await GeminiService.parseCustomerFile(base64, pdfFile.type);
+        processExtractedData(extractedData);
+      };
+      reader.readAsDataURL(pdfFile);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao processar PDF.");
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  const processExtractedData = (data: any[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (data && data.length > 0) {
+      const formatted = data.map((item: any) => ({
+        ...item,
+        customerId: item.customerId || `MAT-${Math.floor(Math.random() * 10000)}`,
+        customerName: item.customerName || 'Cliente Importado',
+        status: DeliveryStatus.PENDING,
+        branch: selectedBranch === 'all' ? 'sp-01' : selectedBranch,
+        date: today, // Força data de hoje
+        boxQuantity: parseInt(item.boxQuantity || 1),
+        address: item.address || 'Endereço não identificado'
+      }));
+      onAddDeliveries(formatted);
+      setShowImportModal(false);
+      setImportText('');
+      setPdfFile(null);
+    } else {
+      alert("A IA não conseguiu identificar dados válidos no arquivo/texto.");
+    }
+  };
+
   const handleManualImport = () => {
+    const today = new Date().toISOString().split('T')[0];
     if (importMode === 'bulk') {
       if (!importText.trim()) return;
       const lines = importText.split('\n').filter(l => l.trim());
@@ -98,7 +126,7 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
           customerName: parts[1]?.trim() || 'Cliente Manual',
           driverName: parts[2]?.trim() || 'Motorista N/I',
           boxQuantity: parseInt(parts[3]) || 1,
-          date: parts[4]?.trim() || new Date().toLocaleDateString('pt-BR'),
+          date: today, // Força data de hoje
           status: DeliveryStatus.PENDING,
           trackingCode: `MN-${Math.floor(1000 + Math.random() * 9000)}`,
           address: 'Endereço Manual',
@@ -114,6 +142,7 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
       const newItem = {
         ...individualForm,
         status: DeliveryStatus.PENDING,
+        date: today, // Força data de hoje
         trackingCode: `MN-${Math.floor(1000 + Math.random() * 9000)}`,
         address: individualForm.address || 'Endereço Manual',
         branch: selectedBranch === 'all' ? 'sp-01' : selectedBranch
@@ -122,12 +151,19 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
     }
     setShowImportModal(false);
     setImportText('');
-    setIndividualForm({ customerId: '', customerName: '', driverName: '', boxQuantity: 1, date: new Date().toLocaleDateString('pt-BR') });
+    setIndividualForm({ customerId: '', customerName: '', driverName: '', boxQuantity: 1 });
   };
 
   const handleBulkStatus = (status: DeliveryStatus) => {
     onBulkUpdate(selectedIds, status);
     setSelectedIds([]);
+  };
+
+  const handleBulkDateChange = (date: string) => {
+    if (onBulkUpdateDate && date) {
+      onBulkUpdateDate(selectedIds, date);
+      setSelectedIds([]);
+    }
   };
 
   const handleBulkDelete = () => {
@@ -175,11 +211,21 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-bottom-10 duration-300">
           <div className="bg-slate-900 text-white px-8 py-4 rounded-[2.5rem] shadow-2xl flex items-center gap-6 border border-slate-700">
             <span className="text-xs font-black uppercase tracking-widest text-indigo-400 pr-6 border-r border-slate-700">{selectedIds.length} Selecionados</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button onClick={() => handleBulkStatus(DeliveryStatus.DELIVERED)} className="px-4 py-2 bg-emerald-600 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700">Entregue</button>
               <button onClick={() => handleBulkStatus(DeliveryStatus.IN_TRANSIT)} className="px-4 py-2 bg-amber-600 rounded-xl text-[10px] font-black uppercase hover:bg-amber-700">Rota</button>
               <button onClick={() => handleBulkStatus(DeliveryStatus.PENDING)} className="px-4 py-2 bg-slate-700 rounded-xl text-[10px] font-black uppercase hover:bg-slate-600">Pendente</button>
-              <button onClick={handleBulkDelete} className="px-4 py-2 bg-rose-600 rounded-xl text-[10px] font-black uppercase hover:bg-rose-700">Excluir</button>
+              
+              <div className="flex items-center gap-2 border-l border-slate-700 pl-4 ml-2">
+                <span className="text-[9px] font-black uppercase text-slate-400">Alterar Data:</span>
+                <input 
+                  type="date" 
+                  className="bg-slate-800 text-white text-[10px] font-bold rounded-lg border-none px-2 py-1 outline-none" 
+                  onChange={(e) => handleBulkDateChange(e.target.value)}
+                />
+              </div>
+
+              <button onClick={handleBulkDelete} className="px-4 py-2 bg-rose-600 rounded-xl text-[10px] font-black uppercase hover:bg-rose-700 ml-4">Excluir</button>
             </div>
             <button onClick={() => setSelectedIds([])} className="text-slate-400 hover:text-white p-2"><i className="fas fa-times"></i></button>
           </div>
@@ -260,42 +306,75 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl p-8 space-y-6 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-4">
-              <div className="flex gap-6">
-                <button onClick={() => setImportMode('ai')} className={`text-xs font-black uppercase border-b-2 pb-2 transition-all tracking-widest ${importMode === 'ai' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400'}`}>IA Smart Import</button>
-                <button onClick={() => setImportMode('bulk')} className={`text-xs font-black uppercase border-b-2 pb-2 transition-all tracking-widest ${importMode === 'bulk' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>Em Massa</button>
-                <button onClick={() => setImportMode('individual')} className={`text-xs font-black uppercase border-b-2 pb-2 transition-all tracking-widest ${importMode === 'individual' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>Individual</button>
+              <div className="flex gap-4 overflow-x-auto no-scrollbar">
+                <button onClick={() => setImportMode('ai')} className={`text-[10px] font-black uppercase border-b-2 pb-2 transition-all tracking-widest whitespace-nowrap ${importMode === 'ai' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400'}`}>IA Smart Import</button>
+                <button onClick={() => setImportMode('pdf')} className={`text-[10px] font-black uppercase border-b-2 pb-2 transition-all tracking-widest whitespace-nowrap ${importMode === 'pdf' ? 'border-rose-500 text-rose-500' : 'border-transparent text-slate-400'}`}>PDF Import</button>
+                <button onClick={() => setImportMode('bulk')} className={`text-[10px] font-black uppercase border-b-2 pb-2 transition-all tracking-widest whitespace-nowrap ${importMode === 'bulk' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>Em Massa</button>
+                <button onClick={() => setImportMode('individual')} className={`text-[10px] font-black uppercase border-b-2 pb-2 transition-all tracking-widest whitespace-nowrap ${importMode === 'individual' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400'}`}>Individual</button>
               </div>
               <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times text-xl"></i></button>
             </div>
             
-            {importMode === 'ai' ? (
+            {importMode === 'ai' && (
               <div className="space-y-4">
                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center gap-3">
                    <i className="fas fa-robot text-emerald-600 text-xl"></i>
-                   <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Cole qualquer texto bagunçado abaixo. A IA Gemini irá organizar as colunas automaticamente para o banco de dados.</p>
+                   <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Cole qualquer texto bagunçado abaixo. A IA Gemini irá organizar as colunas automaticamente para a data de hoje.</p>
                 </div>
-                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none focus:ring-4 focus:ring-emerald-500/10" placeholder="Cole aqui os dados copiados de planilhas ou textos..." />
-                <button onClick={handleAiImport} disabled={isAiProcessing || !importText} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all">
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none focus:ring-4 focus:ring-emerald-500/10" placeholder="Cole aqui os dados copiados..." />
+                <button onClick={handleAiImport} disabled={isAiProcessing || !importText} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3">
                   {isAiProcessing ? <i className="fas fa-spinner animate-spin"></i> : <i className="fas fa-wand-magic-sparkles"></i>}
-                  {isAiProcessing ? 'Processando Inteligência...' : 'Extrair e Salvar no Supabase'}
+                  {isAiProcessing ? 'Processando Inteligência...' : 'Extrair e Salvar'}
                 </button>
               </div>
-            ) : importMode === 'bulk' ? (
+            )}
+
+            {importMode === 'pdf' && (
+              <div className="space-y-4">
+                <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100 flex items-center gap-3">
+                   <i className="fas fa-file-pdf text-rose-600 text-xl"></i>
+                   <p className="text-[10px] font-bold text-rose-700 uppercase tracking-widest">Selecione um PDF. Os dados serão extraídos automaticamente para a data de hoje.</p>
+                </div>
+                <div className="border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center hover:border-rose-300 transition-all cursor-pointer bg-slate-50" onClick={() => document.getElementById('pdfInput')?.click()}>
+                  {pdfFile ? (
+                    <div className="flex flex-col items-center">
+                      <i className="fas fa-file-pdf text-4xl text-rose-500 mb-2"></i>
+                      <p className="text-sm font-black text-slate-800 uppercase">{pdfFile.name}</p>
+                      <button onClick={(e) => { e.stopPropagation(); setPdfFile(null); }} className="text-[10px] text-rose-500 font-bold uppercase mt-2">Remover Arquivo</button>
+                    </div>
+                  ) : (
+                    <>
+                      <i className="fas fa-cloud-upload-alt text-4xl text-slate-300 mb-2"></i>
+                      <p className="text-sm font-bold text-slate-500 uppercase">Clique para selecionar PDF</p>
+                    </>
+                  )}
+                  <input type="file" id="pdfInput" hidden accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] || null)} />
+                </div>
+                <button onClick={handlePdfImport} disabled={isAiProcessing || !pdfFile} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3">
+                  {isAiProcessing ? <i className="fas fa-spinner animate-spin"></i> : <i className="fas fa-robot"></i>}
+                  {isAiProcessing ? 'Lendo Documento...' : 'Importar Lista do PDF'}
+                </button>
+              </div>
+            )}
+
+            {importMode === 'bulk' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                  <span>Layout de Colunas</span>
-                  <span className="text-indigo-500">Matrícula ; Cliente ; Motorista ; Volumes ; Data</span>
+                  <span>Layout de Colunas (Data será HOJE)</span>
+                  <span className="text-indigo-500">Matrícula ; Cliente ; Motorista ; Volumes</span>
                 </div>
-                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none" placeholder="MAT-101 ; João Silva ; Márcio ; 10 ; 2023-10-22" />
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xs font-mono resize-none" placeholder="MAT-101 ; João Silva ; Márcio ; 10" />
                 <button onClick={handleManualImport} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Processar Manual</button>
               </div>
-            ) : (
+            )}
+
+            {importMode === 'individual' && (
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Matrícula</label><input value={individualForm.customerId} onChange={e => setIndividualForm({...individualForm, customerId: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-slate-50" /></div>
                 <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Volumes (CX)</label><input type="number" value={individualForm.boxQuantity} onChange={e => setIndividualForm({...individualForm, boxQuantity: parseInt(e.target.value)})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-slate-50" /></div>
                 <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome do Cliente</label><input value={individualForm.customerName} onChange={e => setIndividualForm({...individualForm, customerName: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm uppercase bg-slate-50" /></div>
-                <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Motorista</label><input value={individualForm.driverName} onChange={e => setIndividualForm({...individualForm, driverName: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm uppercase bg-slate-50" /></div>
-                <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Data</label><input value={individualForm.date} onChange={e => setIndividualForm({...individualForm, date: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm bg-slate-50" /></div>
+                <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Motorista</label><input value={individualForm.driverName} onChange={e => setIndividualForm({...individualForm, driverName: e.target.value})} className="w-full p-4 rounded-2xl border font-bold text-sm uppercase bg-slate-50" /></div>
+                <p className="col-span-2 text-[9px] font-bold text-slate-400 uppercase text-center mt-2 italic">A data será definida automaticamente para HOJE. Você pode editá-la em massa na lista.</p>
                 <button onClick={handleManualImport} className="col-span-2 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl">Salvar Registro</button>
               </div>
             )}
@@ -303,7 +382,6 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
         </div>
       )}
 
-      {/* MODAL: EDIÇÃO INDIVIDUAL */}
       {editTarget && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
           <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl p-8 space-y-6">
@@ -313,7 +391,7 @@ const DeliveryList: React.FC<DeliveryListProps> = ({
               <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Volumes</label><input type="number" value={editTarget.boxQuantity} onChange={e => setEditTarget({...editTarget, boxQuantity: parseInt(e.target.value)})} className="w-full p-3 rounded-xl border font-bold text-xs bg-slate-50" /></div>
               <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Cliente</label><input value={editTarget.customerName} onChange={e => setEditTarget({...editTarget, customerName: e.target.value})} className="w-full p-3 rounded-xl border font-bold text-xs uppercase bg-slate-50" /></div>
               <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Motorista</label><input value={editTarget.driverName} onChange={e => setEditTarget({...editTarget, driverName: e.target.value})} className="w-full p-3 rounded-xl border font-bold text-xs uppercase bg-slate-50" /></div>
-              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Data</label><input value={editTarget.date} onChange={e => setEditTarget({...editTarget, date: e.target.value})} className="w-full p-3 rounded-xl border font-bold text-xs bg-slate-50" /></div>
+              <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Data</label><input type="date" value={editTarget.date} onChange={e => setEditTarget({...editTarget, date: e.target.value})} className="w-full p-3 rounded-xl border font-bold text-xs bg-slate-50" /></div>
               <div className="col-span-1"><label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Filial</label><input value={editTarget.branch} onChange={e => setEditTarget({...editTarget, branch: e.target.value})} className="w-full p-3 rounded-xl border font-bold text-xs uppercase bg-slate-50" /></div>
             </div>
             <div className="flex gap-4 pt-4">

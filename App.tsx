@@ -206,7 +206,30 @@ const App: React.FC = () => {
   return (
     <Layout user={currentUser} activeTab={activeTab} dbStatus={dbStatus} onTabChange={setActiveTab} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} filterRange={filterRange} onFilterRangeChange={setFilterRange} customDate={customDate} onCustomDateChange={setCustomDate} branches={branches} onLogout={() => { setCurrentUser(null); localStorage.removeItem('swiftlog_current_session'); }} onRefresh={fetchAllData}>
       {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
-      {activeTab === 'deliveries' && <DeliveryList selectedBranch={selectedBranch} deliveries={filteredDeliveries} onUpdate={updateDelivery} onBulkUpdate={async (ids, status) => { if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); }} onDeleteDeliveries={async ids => { if(dbStatus==='online') await db.deliveries().delete().in('id', ids); setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); }} onAddDeliveries={addDeliveries} returnReasons={reasons} customerHistory={customerDatabase} clientMappings={clientMappings} />}
+      {activeTab === 'deliveries' && (
+        <DeliveryList 
+          selectedBranch={selectedBranch} 
+          deliveries={filteredDeliveries} 
+          onUpdate={updateDelivery} 
+          onBulkUpdate={async (ids, status) => { 
+            if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); 
+            setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); 
+          }} 
+          onBulkUpdateDate={async (ids, date) => {
+            const deliveryDay = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' });
+            if (dbStatus === 'online') await db.deliveries().update({ date, deliveryDay }).in('id', ids);
+            setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, date, deliveryDay } : d));
+          }}
+          onDeleteDeliveries={async ids => { 
+            if(dbStatus==='online') await db.deliveries().delete().in('id', ids); 
+            setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); 
+          }} 
+          onAddDeliveries={addDeliveries} 
+          returnReasons={reasons} 
+          customerHistory={customerDatabase} 
+          clientMappings={clientMappings} 
+        />
+      )}
       {activeTab === 'critical-clients' && <CriticalClients deliveries={deliveries} customerHistory={customerDatabase} selectedBranch={selectedBranch} filterDate={customDate} onUpdateClient={async (cid, upds) => { if (dbStatus === 'online') await db.critical_base().update(sanitizeForDb(upds, 'critical_base')).eq('customerId', cid); setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c)); }} />}
       {activeTab === 'team' && <TeamPerformance selectedBranch={selectedBranch} deliveries={filteredDeliveries} drivers={drivers} onBulkUpdateStatus={async (ids, s) => { if (dbStatus === 'online') await db.drivers().update({ manualStatus: s }).in('id', ids); setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d)); }} />}
       {activeTab === 'returns' && <ReturnPortal selectedBranch={selectedBranch} deliveries={filteredDeliveries} clientMappings={clientMappings} />}
