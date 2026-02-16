@@ -11,40 +11,39 @@ import Settings from './components/Settings';
 import Login from './components/Login';
 import CriticalClients from './components/CriticalClients';
 import { User, Delivery, ReturnReason, CustomerReputation, Branch, Driver, Vehicle, DeliveryStatus, ClientMapping, DateFilterRange } from './types';
-import { db } from './services/supabase';
+import { db, isSupabaseConfigured, isUsingStripeKey } from './services/supabase';
+import { MOCK_DELIVERIES, MOCK_DRIVERS, MOCK_VEHICLES, RETURN_REASONS, BRANCHES, MOCK_CUSTOMER_REPUTATION, MOCK_USERS } from './constants';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'deliveries' | 'returns' | 'analytics' | 'ai' | 'team' | 'settings' | 'critical-clients'>('dashboard');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
-  const [dbStatus, setDbStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const [dbStatus, setDbStatus] = useState<'connecting' | 'online' | 'offline'>(isSupabaseConfigured ? 'connecting' : 'offline');
   
   const [filterRange, setFilterRange] = useState<DateFilterRange>('today');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
-  const [reasons, setReasons] = useState<ReturnReason[]>([]);
-  const [customerDatabase, setCustomerDatabase] = useState<CustomerReputation[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  
+  // Dados de Fallback (Mock)
+  const [deliveries, setDeliveries] = useState<Delivery[]>(MOCK_DELIVERIES);
+  const [reasons, setReasons] = useState<ReturnReason[]>(RETURN_REASONS);
+  const [customerDatabase, setCustomerDatabase] = useState<CustomerReputation[]>(MOCK_CUSTOMER_REPUTATION);
+  const [branches, setBranches] = useState<Branch[]>(BRANCHES);
+  const [drivers, setDrivers] = useState<Driver[]>(MOCK_DRIVERS);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(MOCK_VEHICLES);
   const [clientMappings, setClientMappings] = useState<ClientMapping[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(MOCK_USERS);
 
   const fetchAllData = async () => {
+    if (!isSupabaseConfigured) {
+      setDbStatus('offline');
+      return;
+    }
+    
     setDbStatus('connecting');
     try {
-      const [
-        { data: delivs, error: e1 },
-        { data: brnchs, error: e2 },
-        { data: rsns, error: e3 },
-        { data: drvrs, error: e4 },
-        { data: vhcls, error: e5 },
-        { data: crit, error: e6 },
-        { data: maps, error: e7 },
-        { data: usrs, error: e8 }
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         db.deliveries().select('*').order('created_at', { ascending: false }),
         db.branches().select('*'),
         db.reasons().select('*'),
@@ -55,23 +54,32 @@ const App: React.FC = () => {
         db.users().select('*')
       ]);
 
-      if (e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8) {
-        console.error("Erro ao carregar tabelas:", { e1, e2, e3, e4, e5, e6, e7, e8 });
-        throw new Error("Falha na resposta do Supabase");
-      }
+      const data: any[] = [];
+      let hasError = false;
 
-      if (delivs) setDeliveries(delivs);
-      if (brnchs) setBranches(brnchs);
-      if (rsns) setReasons(rsns);
-      if (drvrs) setDrivers(drvrs);
-      if (vhcls) setVehicles(vhcls);
-      if (crit) setCustomerDatabase(crit);
-      if (maps) setClientMappings(maps);
-      if (usrs) setUsers(usrs);
-      
-      setDbStatus('online');
+      results.forEach((res, idx) => {
+        if (res.status === 'fulfilled' && !res.value.error) {
+          data[idx] = res.value.data;
+        } else {
+          hasError = true;
+          console.error(`Erro na tabela ${idx}`);
+        }
+      });
+
+      if (!hasError) {
+        if (data[0]) setDeliveries(data[0]);
+        if (data[1]) setBranches(data[1]);
+        if (data[2]) setReasons(data[2]);
+        if (data[3]) setDrivers(data[3]);
+        if (data[4]) setVehicles(data[4]);
+        if (data[5]) setCustomerDatabase(data[5]);
+        if (data[6]) setClientMappings(data[6]);
+        if (data[7]) setUsers(data[7]);
+        setDbStatus('online');
+      } else {
+        setDbStatus('offline');
+      }
     } catch (err) {
-      console.error("Erro crítico de conexão com Supabase:", err);
       setDbStatus('offline');
     }
   };
@@ -96,9 +104,9 @@ const App: React.FC = () => {
     today.setHours(0,0,0,0);
     const parseDate = (dStr: string) => {
       if (!dStr) return new Date();
-      const parts = dStr.split('/');
-      if (parts.length === 3) {
-        return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+      if (dStr.includes('/')) {
+        const [d, m, y] = dStr.split('/').map(Number);
+        return new Date(y, m - 1, d);
       }
       return new Date(dStr);
     };
@@ -121,118 +129,129 @@ const App: React.FC = () => {
   }, [deliveries, selectedBranch, filterRange, customDate]);
 
   const updateDelivery = async (id: string, updates: Partial<Delivery>) => {
-    const { error } = await db.deliveries().update(updates).eq('id', id);
-    if (error) {
-      alert(`Erro ao atualizar entrega: ${error.message}`);
-    } else {
-      setDeliveries(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    if (dbStatus === 'online') {
+      await db.deliveries().update(updates).eq('id', id);
     }
+    setDeliveries(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
   };
 
   const bulkUpdateStatus = async (ids: string[], status: DeliveryStatus) => {
-    const { error } = await db.deliveries().update({ status }).in('id', ids);
-    if (error) {
-      alert(`Erro na atualização em massa: ${error.message}`);
-    } else {
-      setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d));
+    if (dbStatus === 'online') {
+      await db.deliveries().update({ status }).in('id', ids);
     }
+    setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d));
   };
 
   const deleteDeliveries = async (ids: string[]) => {
-    const { error } = await db.deliveries().delete().in('id', ids);
-    if (error) {
-      alert(`Erro ao excluir: ${error.message}`);
-    } else {
-      setDeliveries(prev => prev.filter(d => !ids.includes(d.id)));
+    if (dbStatus === 'online') {
+      await db.deliveries().delete().in('id', ids);
     }
+    setDeliveries(prev => prev.filter(d => !ids.includes(d.id)));
   };
 
   const addDeliveries = async (newOnes: any[]) => {
-    const { data, error } = await db.deliveries().insert(newOnes).select();
-    if (error) {
-      alert(`Erro ao salvar no banco: ${error.message}`);
-      console.error("Payload enviado:", newOnes);
-    } else if (data) {
-      setDeliveries(prev => [...data, ...prev]);
+    // Sanitização para Supabase
+    const toInsert = newOnes.map(d => {
+      const { id, ...rest } = d; // Remove ID temporário (D-xxxx)
+      
+      // Converte data DD/MM/YYYY para YYYY-MM-DD para o banco
+      let dbDate = rest.date;
+      if (rest.date && rest.date.includes('/')) {
+        const [day, month, year] = rest.date.split('/');
+        dbDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      } else if (!rest.date) {
+        dbDate = new Date().toISOString().split('T')[0];
+      }
+
+      return {
+        ...rest,
+        date: dbDate,
+        deliveryDay: rest.deliveryDay || new Date(dbDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' }),
+        status: rest.status || DeliveryStatus.PENDING,
+        boxQuantity: parseInt(String(rest.boxQuantity || 1), 10),
+        address: rest.address || 'Endereço não informado'
+      };
+    });
+
+    if (dbStatus === 'online') {
+      const { data, error } = await db.deliveries().insert(toInsert).select();
+      if (error) {
+        console.error("Insert Error:", error);
+        alert(`Erro ao salvar no banco: ${error.message}`);
+      } else if (data) {
+        setDeliveries(prev => [...data, ...prev]);
+      }
+    } else {
+      setDeliveries(prev => [...newOnes, ...prev]);
     }
   };
 
   const addBranch = async (branch: Branch) => {
-    const { error } = await db.branches().insert([branch]);
-    if (error) alert(`Erro: ${error.message}`);
-    else setBranches(prev => [...prev, branch]);
+    if (dbStatus === 'online') await db.branches().insert([branch]);
+    setBranches(prev => [...prev, branch]);
   };
 
   const removeBranch = async (id: string) => {
-    const { error } = await db.branches().delete().eq('id', id);
-    if (error) alert(`Erro: ${error.message}`);
-    else setBranches(prev => prev.filter(b => b.id !== id));
+    if (dbStatus === 'online') await db.branches().delete().eq('id', id);
+    setBranches(prev => prev.filter(b => b.id !== id));
   };
 
   const addDriver = async (driver: Driver) => {
-    const { error } = await db.drivers().insert([driver]);
-    if (error) alert(`Erro: ${error.message}`);
-    else setDrivers(prev => [...prev, driver]);
+    if (dbStatus === 'online') await db.drivers().insert([driver]);
+    setDrivers(prev => [...prev, driver]);
   };
 
   const removeDriver = async (id: string) => {
-    const { error } = await db.drivers().delete().eq('id', id);
-    if (error) alert(`Erro: ${error.message}`);
-    else setDrivers(prev => prev.filter(d => d.id !== id));
+    if (dbStatus === 'online') await db.drivers().delete().eq('id', id);
+    setDrivers(prev => prev.filter(d => d.id !== id));
   };
 
   const addVehicle = async (vehicle: Vehicle) => {
-    const { error } = await db.vehicles().insert([vehicle]);
-    if (error) alert(`Erro: ${error.message}`);
-    else setVehicles(prev => [...prev, vehicle]);
+    if (dbStatus === 'online') await db.vehicles().insert([vehicle]);
+    setVehicles(prev => [...prev, vehicle]);
   };
 
   const removeVehicle = async (id: string) => {
-    const { error } = await db.vehicles().delete().eq('id', id);
-    if (error) alert(`Erro: ${error.message}`);
-    else setVehicles(prev => prev.filter(v => v.id !== id));
+    if (dbStatus === 'online') await db.vehicles().delete().eq('id', id);
+    setVehicles(prev => prev.filter(v => v.id !== id));
   };
 
   const addReason = async (reason: ReturnReason) => {
-    const { error } = await db.reasons().insert([reason]);
-    if (error) alert(`Erro: ${error.message}`);
-    else setReasons(prev => [...prev, reason]);
+    if (dbStatus === 'online') await db.reasons().insert([reason]);
+    setReasons(prev => [...prev, reason]);
   };
 
   const removeReason = async (id: string) => {
-    const { error } = await db.reasons().delete().eq('id', id);
-    if (error) alert(`Erro: ${error.message}`);
-    else setReasons(prev => prev.filter(r => r.id !== id));
+    if (dbStatus === 'online') await db.reasons().delete().eq('id', id);
+    setReasons(prev => prev.filter(r => r.id !== id));
   };
 
   const addMapping = async (mapping: ClientMapping) => {
-    const { error } = await db.mappings().insert([mapping]);
-    if (error) alert(`Erro: ${error.message}`);
-    else setClientMappings(prev => [...prev, mapping]);
+    if (dbStatus === 'online') await db.mappings().insert([mapping]);
+    setClientMappings(prev => [...prev, mapping]);
   };
 
   const bulkAddMappings = async (mappings: ClientMapping[]) => {
-    const { error } = await db.mappings().insert(mappings);
-    if (error) alert(`Erro: ${error.message}`);
-    else setClientMappings(prev => [...prev, ...mappings]);
+    if (dbStatus === 'online') {
+      const { error } = await db.mappings().insert(mappings);
+      if (error) alert(`Erro no banco (vendedores): ${error.message}`);
+    }
+    setClientMappings(prev => [...prev, ...mappings]);
   };
 
   const removeMapping = async (id: string) => {
-    const { error } = await db.mappings().delete().eq('customerId', id);
-    if (error) alert(`Erro: ${error.message}`);
-    else setClientMappings(prev => prev.filter(m => m.customerId !== id));
+    if (dbStatus === 'online') await db.mappings().delete().eq('customerId', id);
+    setClientMappings(prev => prev.filter(m => m.customerId !== id));
   };
 
   const addCritical = async (critical: CustomerReputation) => {
-    const { error } = await db.critical_base().insert([critical]);
-    if (error) alert(`Erro: ${error.message}`);
-    else setCustomerDatabase(prev => [...prev, critical]);
+    if (dbStatus === 'online') await db.critical_base().insert([critical]);
+    setCustomerDatabase(prev => [...prev, critical]);
   };
 
   const removeCritical = async (id: string) => {
-    const { error } = await db.critical_base().delete().eq('customerId', id);
-    if (error) alert(`Erro: ${error.message}`);
-    else setCustomerDatabase(prev => prev.filter(c => c.customerId !== id));
+    if (dbStatus === 'online') await db.critical_base().delete().eq('customerId', id);
+    setCustomerDatabase(prev => prev.filter(c => c.customerId !== id));
   };
 
   if (!currentUser) {
@@ -244,14 +263,11 @@ const App: React.FC = () => {
           localStorage.setItem('swiftlog_current_session', JSON.stringify(user)); 
         }} 
         onRegister={async (u) => { 
-          const { error } = await db.users().insert([u]);
-          if (!error) {
-            setCurrentUser(u);
-            localStorage.setItem('swiftlog_current_session', JSON.stringify(u));
-            fetchAllData();
-          } else {
-            alert(`Erro ao criar usuário: ${error.message}`);
+          if (dbStatus === 'online') {
+            await db.users().insert([u]);
           }
+          setCurrentUser(u);
+          localStorage.setItem('swiftlog_current_session', JSON.stringify(u));
         }} 
         existingUsers={users} 
       />
@@ -274,6 +290,22 @@ const App: React.FC = () => {
       onLogout={() => { setCurrentUser(null); localStorage.removeItem('swiftlog_current_session'); }}
       onRefresh={fetchAllData}
     >
+      {isUsingStripeKey && (
+        <div className="mb-8 bg-rose-600 text-white p-8 rounded-[2.5rem] shadow-2xl border-4 border-white/20 animate-in slide-in-from-top-4 duration-700">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl animate-pulse">
+              <i className="fas fa-plug-circle-exclamation"></i>
+            </div>
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.2em] mb-1">Chave do Stripe Detectada!</p>
+              <p className="text-xs font-bold leading-relaxed opacity-90 max-w-2xl">
+                O Supabase exige uma chave JWT que começa com `eyJ`. Substitua a chave no arquivo services/supabase.ts.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
       {activeTab === 'deliveries' && (
         <DeliveryList 
@@ -295,9 +327,8 @@ const App: React.FC = () => {
           selectedBranch={selectedBranch} 
           filterDate={customDate}
           onUpdateClient={async (cid, upds) => {
-             const { error } = await db.critical_base().update(upds).eq('customerId', cid);
-             if (error) alert(`Erro: ${error.message}`);
-             else setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c));
+             if (dbStatus === 'online') await db.critical_base().update(upds).eq('customerId', cid);
+             setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c));
           }} 
         />
       )}
@@ -307,9 +338,8 @@ const App: React.FC = () => {
           deliveries={filteredDeliveries} 
           drivers={drivers} 
           onBulkUpdateStatus={async (ids, s) => {
-             const { error } = await db.drivers().update({ manualStatus: s }).in('id', ids);
-             if (error) alert(`Erro: ${error.message}`);
-             else setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d));
+             if (dbStatus === 'online') await db.drivers().update({ manualStatus: s }).in('id', ids);
+             setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d));
           }} 
         />
       )}

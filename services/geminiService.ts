@@ -106,7 +106,9 @@ export class GeminiService {
     });
 
     try {
-      const text = response.text || "[]";
+      let text = response.text || "[]";
+      // Limpa possíveis blocos de código Markdown
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(text);
     } catch (e) {
       console.error("Erro ao parsear JSON da IA", e);
@@ -121,7 +123,7 @@ export class GeminiService {
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analise o seguinte texto copiado de uma planilha de logística e extraia as colunas para um formato JSON estruturado. Identifique: Matrícula do cliente, Nome, Endereço, Código de Rastreio/Transporte, Nome do Motorista e Quantidade de Caixas (Volumes). Texto: \n\n${rawText}`,
+      contents: `Analise o seguinte texto copiado de uma planilha de logística e extraia as colunas para um formato JSON estruturado. Identifique: Matrícula do cliente (customerId), Nome (customerName), Endereço (address), Código de Rastreio (trackingCode), Nome do Motorista (driverName) e Quantidade de Caixas (boxQuantity). Texto: \n\n${rawText}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: this.deliverySchema
@@ -129,7 +131,9 @@ export class GeminiService {
     });
 
     try {
-      const text = response.text || "[]";
+      let text = response.text || "[]";
+      // Limpa possíveis blocos de código Markdown
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(text);
     } catch (e) {
       console.error("Erro ao parsear texto da planilha", e);
@@ -142,12 +146,11 @@ export class GeminiService {
     items: {
       type: Type.OBJECT,
       properties: {
-        id: { type: Type.STRING },
         customerId: { type: Type.STRING, description: "Matrícula do cliente" },
         customerName: { type: Type.STRING },
         address: { type: Type.STRING },
         status: { type: Type.STRING },
-        date: { type: Type.STRING },
+        date: { type: Type.STRING, description: "Data no formato YYYY-MM-DD" },
         trackingCode: { type: Type.STRING },
         driverName: { type: Type.STRING },
         branch: { type: Type.STRING },

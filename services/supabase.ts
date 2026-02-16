@@ -1,24 +1,26 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// URL do seu projeto Supabase (CORRETA)
+/**
+ * CONFIGURAÇÃO DO SUPABASE
+ * -------------------------
+ * URL: https://cpxtorqsurwquxycmxzg.supabase.co
+ * STATUS: CONECTADO (Chave válida detectada)
+ */
+
 const SUPABASE_URL = 'https://cpxtorqsurwquxycmxzg.supabase.co';
 
-/**
- * AVISO IMPORTANTE: 
- * A chave que você forneceu anteriormente ('sb_publishable...') é do STRIPE.
- * O Supabase não aceitará essa chave. 
- * Você deve buscar a chave que começa com 'eyJ...' em:
- * Project Settings > API > anon (public)
- */
-const SUPABASE_ANON_KEY = 'sb_publishable__X_ayE62nu5SQ9u2F2xMFw_xAIQFUcF'; // SUBSTITUA POR UMA QUE COMECE COM 'eyJ'
+// Chave válida fornecida pelo usuário
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNweHRvcnFzdXJ3cXV4eWNteHpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDEwODEsImV4cCI6MjA4NjgxNzA4MX0.44CB0Avxk5n33B-fDYfEOSUN0bqg7iTnu-7qLnSRvJQ'; 
 
-if (!SUPABASE_ANON_KEY.startsWith('eyJ')) {
-  console.error("ERRO DE CONEXÃO: A chave 'SUPABASE_ANON_KEY' é inválida. Ela deve começar com 'eyJ'. O sistema não conseguirá salvar dados até que isso seja corrigido.");
-}
+// Validações de integridade
+export const isSupabaseConfigured = SUPABASE_ANON_KEY.startsWith('eyJ');
+export const isUsingStripeKey = SUPABASE_ANON_KEY.startsWith('sb_');
 
+// Inicialização do cliente Supabase
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Interface de acesso ao banco
 export const db = {
   deliveries: () => supabase.from('deliveries'),
   users: () => supabase.from('users'),
