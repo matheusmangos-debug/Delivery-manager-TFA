@@ -73,10 +73,24 @@ const App: React.FC = () => {
   };
 
   const fetchAllData = async () => {
-    if (!isSupabaseConfigured) { setDbStatus('offline'); return; }
+    if (!isSupabaseConfigured) { 
+      console.warn("Supabase não configurado ou chave inválida.");
+      setDbStatus('offline'); 
+      return; 
+    }
+    
     setDbStatus('connecting');
     
     try {
+      // Teste de conexão simples tentando ler a contagem de uma tabela
+      const { error: testError } = await db.users().select('count', { count: 'exact', head: true });
+      
+      if (testError) {
+        console.error("Erro ao testar conexão:", testError.message);
+        setDbStatus('offline');
+        return;
+      }
+
       const results = await Promise.allSettled([
         db.deliveries().select('*').order('date', { ascending: false }),
         db.branches().select('*'),
@@ -108,7 +122,7 @@ const App: React.FC = () => {
       if (data[6]) setClientMappings(data[6]);
       if (data[7]) setUsers(data[7]);
       
-      setDbStatus(hasError ? 'offline' : 'online');
+      setDbStatus('online');
     } catch (err) { 
       setDbStatus('offline'); 
     }
@@ -125,7 +139,6 @@ const App: React.FC = () => {
       const channel = supabase
         .channel('swiftlog-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => fetchAllData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => fetchAllData())
         .subscribe();
 
       return () => { supabase.removeChannel(channel); };
@@ -173,7 +186,7 @@ const App: React.FC = () => {
       if (!error && data) {
         const formattedData = data.map(d => ({ ...d, items: d.items ? String(d.items).split(',').map((i: string) => i.trim()) : [] }));
         setDeliveries(prev => [...formattedData, ...prev]);
-      } else if (error) { alert(`Erro: ${error.message}. Verifique as chaves do Supabase.`); }
+      }
     } else { setDeliveries(prev => [...newOnes.map(n => ({...n, id: crypto.randomUUID(), date: today})), ...prev]); }
   };
 
@@ -229,7 +242,7 @@ const App: React.FC = () => {
       {activeTab === 'team' && <TeamPerformance selectedBranch={selectedBranch} deliveries={filteredDeliveries} drivers={drivers} onBulkUpdateStatus={async (ids, s) => { if (dbStatus === 'online') await db.drivers().update({ manualStatus: s }).in('id', ids); setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d)); }} />}
       {activeTab === 'returns' && <ReturnPortal selectedBranch={selectedBranch} deliveries={filteredDeliveries} clientMappings={clientMappings} />}
       {activeTab === 'analytics' && <AnalyticsView selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
-      {activeTab === 'settings' && <Settings reasons={reasons} onAddReason={addReason} onRemoveReason={async id => { if(dbStatus==='online') await db.reasons().delete().eq('id', id); setReasons(prev=>prev.filter(r=>r.id!==id)); }} customerDatabase={customerDatabase} onAddCritical={addCritical} onRemoveCritical={async id => { if(dbStatus==='online') await db.critical_base().delete().eq('customerId', id); setCustomerDatabase(prev=>prev.filter(c=>c.customerId!==id)); }} branches={branches} onAddBranch={addBranch} onRemoveBranch={async id => { if(dbStatus==='online') await db.branches().delete().eq('id', id); setBranches(prev=>prev.filter(b=>b.id!==id)); }} drivers={drivers} onAddDriver={addDriver} onRemoveDriver={async id => { if(dbStatus==='online') await db.drivers().delete().eq('id', id); setDrivers(prev=>prev.filter(d=>d.id!==id)); }} vehicles={vehicles} onAddVehicle={addVehicle} onRemoveVehicle={async id => { if(dbStatus==='online') await db.vehicles().delete().eq('id', id); setVehicles(prev=>prev.filter(v=>v.id!==id)); }} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={bulkAddMappings} onRemoveMapping={async id => { if(dbStatus==='online') await db.mappings().delete().eq('customerId', id); setClientMappings(prev=>prev.filter(m=>m.customerId!==id)); }} />}
+      {activeTab === 'settings' && <Settings dbStatus={dbStatus} onRefresh={fetchAllData} reasons={reasons} onAddReason={addReason} onRemoveReason={async id => { if(dbStatus==='online') await db.reasons().delete().eq('id', id); setReasons(prev=>prev.filter(r=>r.id!==id)); }} customerDatabase={customerDatabase} onAddCritical={addCritical} onRemoveCritical={async id => { if(dbStatus==='online') await db.critical_base().delete().eq('customerId', id); setCustomerDatabase(prev=>prev.filter(c=>c.customerId!==id)); }} branches={branches} onAddBranch={addBranch} onRemoveBranch={async id => { if(dbStatus==='online') await db.branches().delete().eq('id', id); setBranches(prev=>prev.filter(b=>b.id!==id)); }} drivers={drivers} onAddDriver={addDriver} onRemoveDriver={async id => { if(dbStatus==='online') await db.drivers().delete().eq('id', id); setDrivers(prev=>prev.filter(d=>d.id!==id)); }} vehicles={vehicles} onAddVehicle={addVehicle} onRemoveVehicle={async id => { if(dbStatus==='online') await db.vehicles().delete().eq('id', id); setVehicles(prev=>prev.filter(v=>v.id!==id)); }} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={bulkAddMappings} onRemoveMapping={async id => { if(dbStatus==='online') await db.mappings().delete().eq('customerId', id); setClientMappings(prev=>prev.filter(m=>m.customerId!==id)); }} />}
       {activeTab === 'ai' && <AISection hasProAccess={hasApiKey} onOpenKey={async () => { if (window.aistudio) { await window.aistudio.openSelectKey(); setHasApiKey(true); } }} />}
     </Layout>
   );

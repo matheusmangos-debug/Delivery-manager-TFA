@@ -11,12 +11,12 @@ const SUPABASE_URL = 'https://cpxtorqsurwquxycmxzg.supabase.co';
 
 /**
  * Chave Anon Key (JWT) oficial do projeto cpxtorqsurwquxycmxzg.
- * Esta chave permite a comunicação segura com a API do Supabase.
+ * Esta chave é necessária para autenticar as requisições à API do Supabase.
  */
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNweHRvcnFzdXJ3cXV4eWNteHpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDEwODEsImV4cCI6MjA4NjgxNzA4MX0.44CB0Avxk5n33B-fDYfEOSUN0bqg7iTnu-7qLnSRvJQ'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNweHRvcnFzdXJ3cXV4eWNteHzgIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDEwODEsImV4cCI6MjA4NjgxNzA4MX0.44CB0Avxk5n33B-fDYfEOSUN0bqg7iTnu-7qLnSRvJQ'; 
 
 // O sistema valida se a chave é um JWT válido para habilitar o modo Online.
-export const isSupabaseConfigured = SUPABASE_ANON_KEY.startsWith('eyJ');
+export const isSupabaseConfigured = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ');
 
 // Inicialização do cliente Supabase
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

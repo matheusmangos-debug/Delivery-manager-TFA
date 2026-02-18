@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { ReturnReason, CustomerReputation, Branch, Driver, Vehicle, ClientMapping } from '../types';
 
 interface SettingsProps {
+  dbStatus: 'connecting' | 'online' | 'offline';
+  onRefresh: () => void;
   reasons: ReturnReason[]; onAddReason: (r: ReturnReason) => void; onRemoveReason: (id: string) => void;
   customerDatabase: CustomerReputation[]; onAddCritical: (c: CustomerReputation) => void; onRemoveCritical: (id: string) => void;
   branches: Branch[]; onAddBranch: (b: Branch) => void; onRemoveBranch: (id: string) => void;
@@ -12,6 +14,7 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
+  dbStatus, onRefresh,
   reasons, onAddReason, onRemoveReason,
   customerDatabase, onAddCritical, onRemoveCritical,
   branches, onAddBranch, onRemoveBranch,
@@ -27,7 +30,6 @@ const Settings: React.FC<SettingsProps> = ({
 -- SQL COMPLETO - SWIFTLOG PRO
 -- Execute no SQL Editor do Supabase para criar as tabelas e liberar acesso
 
--- 1. TABELA DE ENTREGAS
 CREATE TABLE IF NOT EXISTS deliveries (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   "customerId" text NOT NULL,
@@ -46,7 +48,6 @@ CREATE TABLE IF NOT EXISTS deliveries (
   created_at timestamptz DEFAULT now()
 );
 
--- 2. TABELA DE REPUTAÇÃO / CLIENTES CRÍTICOS
 CREATE TABLE IF NOT EXISTS customer_reputation (
   "customerId" text PRIMARY KEY,
   "returnCount" integer DEFAULT 0,
@@ -58,7 +59,6 @@ CREATE TABLE IF NOT EXISTS customer_reputation (
   "registrationDate" text
 );
 
--- 3. TABELA DE VEÍCULOS
 CREATE TABLE IF NOT EXISTS vehicles (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   plate text UNIQUE,
@@ -68,7 +68,6 @@ CREATE TABLE IF NOT EXISTS vehicles (
   "driverId" text
 );
 
--- 4. TABELA DE MOTORISTAS
 CREATE TABLE IF NOT EXISTS drivers (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text,
@@ -77,14 +76,12 @@ CREATE TABLE IF NOT EXISTS drivers (
   "manualStatus" text
 );
 
--- 5. TABELA DE FILIAIS
 CREATE TABLE IF NOT EXISTS branches (
   id text PRIMARY KEY,
   name text,
   location text
 );
 
--- 6. MOTIVOS DE RETORNO
 CREATE TABLE IF NOT EXISTS return_reasons (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   label text,
@@ -92,7 +89,6 @@ CREATE TABLE IF NOT EXISTS return_reasons (
   "isActive" boolean DEFAULT true
 );
 
--- 7. MAPEAMENTO CLIENTE X VENDEDOR
 CREATE TABLE IF NOT EXISTS client_mappings (
   "customerId" text PRIMARY KEY,
   "sellerName" text,
@@ -101,7 +97,6 @@ CREATE TABLE IF NOT EXISTS client_mappings (
   "customerName" text
 );
 
--- 8. TABELA DE USUÁRIOS DO SISTEMA
 CREATE TABLE IF NOT EXISTS users (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text,
@@ -112,7 +107,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at timestamptz DEFAULT now()
 );
 
--- 9. DESATIVAR RLS PARA FACILITAR INTEGRAÇÃO (OPCIONAL MAS RECOMENDADO PARA TESTES)
 ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
 ALTER TABLE customer_reputation DISABLE ROW LEVEL SECURITY;
 ALTER TABLE vehicles DISABLE ROW LEVEL SECURITY;
@@ -147,32 +141,58 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
         
         {activeSubTab === 'database' && (
           <div className="space-y-6 max-w-4xl">
-            <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex items-start gap-4">
-              <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center text-xl shrink-0">
-                <i className="fas fa-triangle-exclamation"></i>
+            <div className="flex items-center justify-between mb-4">
+               <h3 className="font-black text-slate-800 uppercase text-sm">Status da Conexão</h3>
+               <button 
+                 onClick={onRefresh}
+                 className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-md ${
+                   dbStatus === 'online' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                 }`}
+               >
+                 {dbStatus === 'connecting' ? 'Testando...' : 'Testar Conexão Agora'}
+               </button>
+            </div>
+
+            <div className={`p-6 rounded-[2rem] border-2 flex items-start gap-4 ${
+              dbStatus === 'online' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+              dbStatus === 'offline' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}>
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 ${
+                dbStatus === 'online' ? 'bg-emerald-500 text-white' : 
+                dbStatus === 'offline' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'
+              }`}>
+                <i className={`fas ${dbStatus === 'online' ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
               </div>
               <div>
-                <h3 className="font-black text-amber-800 uppercase text-sm mb-1">Configuração de Banco de Dados</h3>
-                <p className="text-xs text-amber-700 font-medium leading-relaxed">
-                  Execute este script no SQL Editor do seu projeto Supabase para garantir compatibilidade total com o sistema.
+                <h3 className="font-black uppercase text-sm mb-1">
+                  {dbStatus === 'online' ? 'Conexão Estabelecida' : dbStatus === 'offline' ? 'Erro de Conexão' : 'Conectando...'}
+                </h3>
+                <p className="text-xs font-medium leading-relaxed opacity-80">
+                  {dbStatus === 'online' 
+                    ? 'O sistema está sincronizado com o Supabase. Todas as operações serão salvas no banco de dados real.' 
+                    : 'O sistema não conseguiu se comunicar com o banco de dados. Verifique o console e execute o script SQL abaixo.'}
                 </p>
               </div>
             </div>
-            <div className="relative">
-              <pre className="bg-slate-900 text-emerald-400 p-6 rounded-3xl text-[10px] font-mono overflow-x-auto h-[350px] border-4 border-slate-800">
-                {SQL_SCHEMA}
-              </pre>
-              <button 
-                onClick={() => { navigator.clipboard.writeText(SQL_SCHEMA); alert("SQL Copiado!"); }}
-                className="absolute top-4 right-4 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[10px] font-black uppercase backdrop-blur-md border border-white/20"
-              >
-                Copiar SQL
-              </button>
+
+            <div className="mt-8">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Script SQL de Inicialização</h4>
+              <div className="relative">
+                <pre className="bg-slate-900 text-emerald-400 p-6 rounded-3xl text-[10px] font-mono overflow-x-auto h-[350px] border-4 border-slate-800">
+                  {SQL_SCHEMA}
+                </pre>
+                <button 
+                  onClick={() => { navigator.clipboard.writeText(SQL_SCHEMA); alert("SQL Copiado!"); }}
+                  className="absolute top-4 right-4 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[10px] font-black uppercase backdrop-blur-md border border-white/20"
+                >
+                  Copiar SQL
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* CADASTRO DE MOTIVOS */}
+        {/* Outras abas permanecem iguais */}
         {activeSubTab === 'reasons' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -193,7 +213,6 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
           </div>
         )}
 
-        {/* CADASTRO DE FILIAIS */}
         {activeSubTab === 'branches' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -218,7 +237,6 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
           </div>
         )}
 
-        {/* CADASTRO DE FROTA */}
         {activeSubTab === 'vehicles' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -249,7 +267,6 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
           </div>
         )}
 
-        {/* CADASTRO DE EQUIPE */}
         {activeSubTab === 'drivers' && (
           <div className="space-y-8 max-w-4xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -280,7 +297,6 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
           </div>
         )}
 
-        {/* CADASTRO DE CLIENTES CRÍTICOS */}
         {activeSubTab === 'critical-base' && (
           <div className="space-y-8 max-w-5xl">
             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
@@ -316,7 +332,6 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
           </div>
         )}
 
-        {/* CADASTRO DE VENDEDORES */}
         {activeSubTab === 'mappings' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex items-center gap-4 mb-2">
