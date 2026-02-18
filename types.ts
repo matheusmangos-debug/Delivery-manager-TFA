@@ -36,22 +36,23 @@ export interface CustomerReputation {
   status: 'Retorno' | 'Pendência' | 'Reclamação' | 'Restrição de Horário';
   riskLevel: 'low' | 'medium' | 'high';
   resolutionStatus: 'Pendente' | 'Resolvido';
-  registrationDate: string;
+  registration_date?: string; // Usando snake_case para bater com DB se necessário
+  registrationDate?: string;
 }
 
 export interface Delivery {
-  id: string;
+  id?: string;
   customerId: string;
   customerName: string;
   address: string;
   status: DeliveryStatus;
   date: string;
-  deliveryDay: string;
+  deliveryDay?: string;
   trackingCode: string;
-  items: string[];
+  items?: string[];
   boxQuantity: number;
-  driverName: string;
-  branch: string;
+  driverName?: string;
+  branch?: string;
   licensePlate?: string;
   helpers?: string[];
   returnReason?: string;
@@ -116,7 +117,6 @@ export interface ReturnOrder {
   date: string;
 }
 
-// Fix: Added missing Checkout interface to support CheckoutForm component and fix import error
 export interface Checkout {
   id?: string;
   orderNumber: string;

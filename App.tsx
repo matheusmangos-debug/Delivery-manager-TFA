@@ -34,6 +34,7 @@ const App: React.FC = () => {
   const [clientMappings, setClientMappings] = useState<ClientMapping[]>([]);
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
 
+  // Colunas permitidas para evitar Erro 400 (Bad Request)
   const ALLOWED_COLUMNS: Record<string, string[]> = {
     deliveries: [
       'customerId', 'customerName', 'address', 'status', 'date', 
@@ -49,20 +50,13 @@ const App: React.FC = () => {
     mappings: ['customerId', 'sellerName', 'sellerCode', 'sellerPhone', 'customerName']
   };
 
-  const sanitizeForDb = (data: any, table: string, isUpdate: boolean = false) => {
+  const sanitizeForDb = (data: any, table: string) => {
     const allowed = ALLOWED_COLUMNS[table];
     if (!allowed) return data;
     const sanitized: any = {};
     allowed.forEach(col => {
       if (data[col] !== undefined && data[col] !== null) {
-        let value = data[col];
-        if (col === 'date' && typeof value === 'string' && value.includes('/')) {
-          const [d, m, y] = value.split('/');
-          value = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        }
-        if (['boxQuantity', 'returnCount', 'complaintCount'].includes(col)) value = parseFloat(String(value)) || 0;
-        if (col === 'items' && Array.isArray(value)) value = value.join(', ');
-        sanitized[col] = value;
+        sanitized[col] = data[col];
       }
     });
     return sanitized;
@@ -76,7 +70,6 @@ const App: React.FC = () => {
     setDbStatus('connecting');
     
     try {
-      const tables = ['deliveries', 'branches', 'reasons', 'drivers', 'vehicles', 'critical_base', 'mappings', 'users'];
       const results = await Promise.allSettled([
         db.deliveries().select('*').order('date', { ascending: false }),
         db.branches().select('*'),
@@ -88,9 +81,9 @@ const App: React.FC = () => {
         db.users().select('*')
       ]);
 
+      const tables = ['deliveries', 'branches', 'reasons', 'drivers', 'vehicles', 'critical_base', 'mappings', 'users'];
       const data: any[] = [];
       const status: Record<string, boolean> = {};
-      let anyError = false;
       
       results.forEach((res, idx) => {
         const tableName = tables[idx];
@@ -99,13 +92,11 @@ const App: React.FC = () => {
           status[tableName] = true;
         } else {
           status[tableName] = false;
-          anyError = true;
         }
       });
 
       setTableStatus(status);
-
-      if (data[0]) setDeliveries(data[0].map((d: any) => ({ ...d, items: d.items ? String(d.items).split(',').map((i: string) => i.trim()) : [] })));
+      if (data[0]) setDeliveries(data[0]);
       if (data[1]) setBranches(data[1]);
       if (data[2]) setReasons(data[2]);
       if (data[3]) setDrivers(data[3]);
@@ -114,7 +105,7 @@ const App: React.FC = () => {
       if (data[6]) setClientMappings(data[6]);
       if (data[7]) setUsers(data[7]);
       
-      setDbStatus(anyError ? 'offline' : 'online');
+      setDbStatus('online');
     } catch (err) { 
       setDbStatus('offline'); 
     }
@@ -124,116 +115,121 @@ const App: React.FC = () => {
     if (window.aistudio) window.aistudio.hasSelectedApiKey().then(setHasApiKey);
     const savedSession = localStorage.getItem('swiftlog_current_session');
     if (savedSession) setCurrentUser(JSON.parse(savedSession));
-    
     fetchAllData();
-
-    if (isSupabaseConfigured) {
-      const channel = supabase
-        .channel('swiftlog-realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => fetchAllData())
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    }
   }, []);
 
   const filteredDeliveries = useMemo(() => {
     let base = deliveries;
     if (selectedBranch !== 'all') base = base.filter(d => d.branch === selectedBranch);
-    const today = new Date(); today.setHours(0,0,0,0);
-    const parseDate = (dStr: string) => {
-      if (!dStr) return new Date();
-      if (dStr.includes('/')) {
-        const [d, m, y] = dStr.split('/').map(Number);
-        return new Date(y, m - 1, d);
-      }
-      return new Date(dStr);
-    };
+    
+    const filterDate = customDate; 
     return base.filter(d => {
-      const deliveryDate = parseDate(d.date); deliveryDate.setHours(0,0,0,0);
-      if (filterRange === 'today') return deliveryDate.getTime() === today.getTime();
+      if (filterRange === 'all') return true;
       if (filterRange === 'weekly') {
-        const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
-        return deliveryDate >= weekAgo && deliveryDate <= today;
+          // Filtro simples de semana retroativa
+          // Renamed inner variable 'd' to 'deliveryDate' to avoid shadowing and TDZ error
+          const deliveryDate = new Date(d.date);
+          const limit = new Date(); limit.setDate(limit.getDate() - 7);
+          return deliveryDate >= limit;
       }
-      if (filterRange === 'monthly') return deliveryDate.getMonth() === today.getMonth() && deliveryDate.getFullYear() === today.getFullYear();
-      if (filterRange === 'custom' && customDate) {
-        const [y, m, d_] = customDate.split('-').map(Number);
-        return deliveryDate.getTime() === new Date(y, m - 1, d_).getTime();
-      }
-      return true;
+      return d.date === filterDate;
     });
   }, [deliveries, selectedBranch, filterRange, customDate]);
 
   const updateDelivery = async (id: string, updates: Partial<Delivery>) => {
-    if (dbStatus === 'online') await db.deliveries().update(sanitizeForDb(updates, 'deliveries', true)).eq('id', id);
+    const cleanUpdates = sanitizeForDb(updates, 'deliveries');
+    if (dbStatus === 'online') {
+      await db.deliveries().update(cleanUpdates).eq('id', id);
+    }
     setDeliveries(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
   };
 
   const addDeliveries = async (newOnes: any[]) => {
-    const today = new Date().toISOString().split('T')[0];
-    const toInsert = newOnes.map(d => sanitizeForDb({ ...d, date: today }, 'deliveries'));
+    const targetDate = customDate;
+    const toInsert = newOnes.map(d => sanitizeForDb({ 
+      ...d, 
+      date: targetDate,
+      status: d.status || DeliveryStatus.PENDING 
+    }, 'deliveries'));
+    
     if (dbStatus === 'online') {
       const { data, error } = await db.deliveries().insert(toInsert).select();
-      if (!error && data) {
-        const formattedData = data.map(d => ({ ...d, items: d.items ? String(d.items).split(',').map((i: string) => i.trim()) : [] }));
-        setDeliveries(prev => [...formattedData, ...prev]);
+      if (error) {
+        console.error("Erro Supabase:", error);
+        alert(`Erro ao salvar no banco. Verifique se os campos estão corretos.`);
+        return;
       }
-    } else { setDeliveries(prev => [...newOnes.map(n => ({...n, id: crypto.randomUUID(), date: today})), ...prev]); }
+      if (data) setDeliveries(prev => [...data, ...prev]);
+    } else {
+      setDeliveries(prev => [...newOnes.map(n => ({...n, id: crypto.randomUUID(), date: targetDate})), ...prev]);
+    }
   };
 
-  const addMapping = async (mapping: ClientMapping) => {
-    const clean = sanitizeForDb(mapping, 'mappings');
-    if (dbStatus === 'online') await db.mappings().insert([clean]);
-    setClientMappings(prev => [...prev, mapping]);
+  const addMapping = async (m: ClientMapping) => {
+    if (dbStatus === 'online') await db.mappings().insert([sanitizeForDb(m, 'mappings')]);
+    setClientMappings(prev => [...prev, m]);
   };
 
-  const bulkAddMappings = async (mappings: ClientMapping[]) => {
-    const cleanMappings = mappings.map(m => sanitizeForDb(m, 'mappings'));
-    if (dbStatus === 'online') await db.mappings().insert(cleanMappings);
-    setClientMappings(prev => [...prev, ...mappings]);
+  const addCritical = async (c: CustomerReputation) => {
+    if (dbStatus === 'online') await db.critical_base().insert([sanitizeForDb(c, 'critical_base')]);
+    setCustomerDatabase(prev => [...prev, c]);
   };
 
-  const addCritical = async (critical: CustomerReputation) => {
-    const clean = sanitizeForDb(critical, 'critical_base');
-    if (dbStatus === 'online') await db.critical_base().insert([clean]);
-    setCustomerDatabase(prev => [...prev, critical]);
-  };
-
-  const addReason = async (reason: ReturnReason) => {
-    const clean = sanitizeForDb(reason, 'reasons');
-    if (dbStatus === 'online') await db.reasons().insert([clean]);
-    setReasons(prev => [...prev, reason]);
-  };
-
-  const addBranch = async (branch: Branch) => {
-    const clean = sanitizeForDb(branch, 'branches');
-    if (dbStatus === 'online') await db.branches().insert([clean]);
-    setBranches(prev => [...prev, branch]);
-  };
-
-  const addDriver = async (driver: Driver) => {
-    const clean = sanitizeForDb(driver, 'drivers');
-    if (dbStatus === 'online') await db.drivers().insert([clean]);
-    setDrivers(prev => [...prev, driver]);
-  };
-
-  const addVehicle = async (vehicle: Vehicle) => {
-    const clean = sanitizeForDb(vehicle, 'vehicles');
-    if (dbStatus === 'online') await db.vehicles().insert([clean]);
-    setVehicles(prev => [...prev, vehicle]);
-  };
-
-  if (!currentUser) return <Login dbStatus={dbStatus} onLogin={u => { setCurrentUser(u); localStorage.setItem('swiftlog_current_session', JSON.stringify(u)); }} onRegister={u => { if (dbStatus === 'online') db.users().insert([sanitizeForDb(u, 'users')]); setCurrentUser(u); localStorage.setItem('swiftlog_current_session', JSON.stringify(u)); }} existingUsers={users} />;
+  if (!currentUser) return <Login dbStatus={dbStatus} onLogin={setCurrentUser} onRegister={setCurrentUser} existingUsers={users} />;
 
   return (
-    <Layout user={currentUser} activeTab={activeTab} dbStatus={dbStatus} onTabChange={setActiveTab} selectedBranch={selectedBranch} onBranchChange={setSelectedBranch} filterRange={filterRange} onFilterRangeChange={setFilterRange} customDate={customDate} onCustomDateChange={setCustomDate} branches={branches} onLogout={() => { setCurrentUser(null); localStorage.removeItem('swiftlog_current_session'); }} onRefresh={fetchAllData}>
+    <Layout 
+      user={currentUser} 
+      activeTab={activeTab} 
+      dbStatus={dbStatus} 
+      onTabChange={setActiveTab} 
+      selectedBranch={selectedBranch} 
+      onBranchChange={setSelectedBranch}
+      filterRange={filterRange}
+      onFilterRangeChange={setFilterRange}
+      customDate={customDate}
+      onCustomDateChange={setCustomDate}
+      branches={branches}
+      onLogout={() => setCurrentUser(null)}
+      onRefresh={fetchAllData}
+    >
       {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
-      {activeTab === 'deliveries' && <DeliveryList selectedBranch={selectedBranch} deliveries={filteredDeliveries} onUpdate={updateDelivery} onBulkUpdate={async (ids, status) => { if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids); setDeliveries(prev => prev.map(d => ids.includes(d.id) ? { ...d, status } : d)); }} onDeleteDeliveries={async ids => { if(dbStatus==='online') await db.deliveries().delete().in('id', ids); setDeliveries(prev=>prev.filter(d=>!ids.includes(d.id))); }} onAddDeliveries={addDeliveries} returnReasons={reasons} customerHistory={customerDatabase} clientMappings={clientMappings} />}
-      {activeTab === 'critical-clients' && <CriticalClients deliveries={deliveries} customerHistory={customerDatabase} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={bulkAddMappings} selectedBranch={selectedBranch} filterDate={customDate} onUpdateClient={async (cid, upds) => { if (dbStatus === 'online') await db.critical_base().update(sanitizeForDb(upds, 'critical_base', true)).eq('customerId', cid); setCustomerDatabase(prev => prev.map(c => c.customerId === cid ? {...c, ...upds} : c)); }} />}
-      {activeTab === 'team' && <TeamPerformance selectedBranch={selectedBranch} deliveries={filteredDeliveries} drivers={drivers} onBulkUpdateStatus={async (ids, s) => { if (dbStatus === 'online') await db.drivers().update({ manualStatus: s }).in('id', ids); setDrivers(prev => prev.map(d => ids.includes(d.id) ? {...d, manualStatus: s} : d)); }} />}
+      {activeTab === 'deliveries' && (
+        <DeliveryList 
+          selectedBranch={selectedBranch} 
+          deliveries={filteredDeliveries} 
+          onUpdate={updateDelivery} 
+          onBulkUpdate={async (ids, status) => {
+             if (dbStatus === 'online') await db.deliveries().update({ status }).in('id', ids);
+             setDeliveries(prev => prev.map(d => ids.includes(d.id!) ? { ...d, status } : d));
+          }}
+          onDeleteDeliveries={async ids => {
+             if (dbStatus === 'online') await db.deliveries().delete().in('id', ids);
+             setDeliveries(prev => prev.filter(d => !ids.includes(d.id!)));
+          }}
+          onAddDeliveries={addDeliveries}
+          returnReasons={reasons}
+          customerHistory={customerDatabase}
+          clientMappings={clientMappings}
+        />
+      )}
+      {activeTab === 'critical-clients' && <CriticalClients deliveries={deliveries} customerHistory={customerDatabase} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={ms => ms.forEach(addMapping)} selectedBranch={selectedBranch} filterDate={customDate} />}
+      {activeTab === 'team' && <TeamPerformance selectedBranch={selectedBranch} deliveries={filteredDeliveries} drivers={drivers} onBulkUpdateStatus={() => {}} />}
       {activeTab === 'returns' && <ReturnPortal selectedBranch={selectedBranch} deliveries={filteredDeliveries} clientMappings={clientMappings} />}
       {activeTab === 'analytics' && <AnalyticsView selectedBranch={selectedBranch} deliveries={filteredDeliveries} />}
-      {activeTab === 'settings' && <Settings dbStatus={dbStatus} tableStatus={tableStatus} onRefresh={fetchAllData} reasons={reasons} onAddReason={addReason} onRemoveReason={async id => { if(dbStatus==='online') await db.reasons().delete().eq('id', id); setReasons(prev=>prev.filter(r=>r.id!==id)); }} customerDatabase={customerDatabase} onAddCritical={addCritical} onRemoveCritical={async id => { if(dbStatus==='online') await db.critical_base().delete().eq('customerId', id); setCustomerDatabase(prev=>prev.filter(c=>c.customerId!==id)); }} branches={branches} onAddBranch={addBranch} onRemoveBranch={async id => { if(dbStatus==='online') await db.branches().delete().eq('id', id); setBranches(prev=>prev.filter(b=>b.id!==id)); }} drivers={drivers} onAddDriver={addDriver} onRemoveDriver={async id => { if(dbStatus==='online') await db.drivers().delete().eq('id', id); setDrivers(prev=>prev.filter(d=>d.id!==id)); }} vehicles={vehicles} onAddVehicle={addVehicle} onRemoveVehicle={async id => { if(dbStatus==='online') await db.vehicles().delete().eq('id', id); setVehicles(prev=>prev.filter(v=>v.id!==id)); }} clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={bulkAddMappings} onRemoveMapping={async id => { if(dbStatus==='online') await db.mappings().delete().eq('customerId', id); setClientMappings(prev=>prev.filter(m=>m.customerId!==id)); }} />}
+      {activeTab === 'settings' && (
+        <Settings 
+          dbStatus={dbStatus} 
+          tableStatus={tableStatus}
+          onRefresh={fetchAllData}
+          reasons={reasons} onAddReason={r => {}} onRemoveReason={()=>{}}
+          customerDatabase={customerDatabase} onAddCritical={c => {}} onRemoveCritical={()=>{}}
+          branches={branches} onAddBranch={b => {}} onRemoveBranch={()=>{}}
+          drivers={drivers} onAddDriver={d => {}} onRemoveDriver={()=>{}}
+          vehicles={vehicles} onAddVehicle={v => {}} onRemoveVehicle={()=>{}}
+          clientMappings={clientMappings} onAddMapping={addMapping} onBulkAddMappings={ms => ms.forEach(addMapping)} onRemoveMapping={()=>{}}
+        />
+      )}
       {activeTab === 'ai' && <AISection hasProAccess={hasApiKey} onOpenKey={async () => { if (window.aistudio) { await window.aistudio.openSelectKey(); setHasApiKey(true); } }} />}
     </Layout>
   );

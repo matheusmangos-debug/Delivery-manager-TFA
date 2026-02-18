@@ -96,6 +96,15 @@ const Layout: React.FC<LayoutProps> = ({
             <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{menuItems.find(i => i.id === activeTab)?.label}</h1>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                <i className="fas fa-calendar-alt text-indigo-500 text-xs"></i>
+                <input 
+                  type="date" 
+                  value={customDate} 
+                  onChange={(e) => onCustomDateChange(e.target.value)} 
+                  className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer uppercase"
+                />
+              </div>
+              <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
                 <select value={selectedBranch} onChange={(e) => onBranchChange(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer uppercase">
                   <option value="all">Todas as Filiais</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
