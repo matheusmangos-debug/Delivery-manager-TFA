@@ -63,7 +63,7 @@ const Layout: React.FC<LayoutProps> = ({
                dbStatus === 'offline' ? 'bg-rose-400' : 
                'bg-amber-400 animate-bounce'
              }`}></span>
-             {dbStatus === 'online' ? 'Banco de Dados Online' : dbStatus === 'offline' ? 'Banco Desconectado' : 'Conectando Banco...'}
+             {dbStatus === 'online' ? 'Banco Online' : dbStatus === 'offline' ? 'Banco Offline' : 'Verificando...'}
            </div>
         </div>
 
@@ -100,18 +100,6 @@ const Layout: React.FC<LayoutProps> = ({
                   <option value="all">Todas as Filiais</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
-              </div>
-              <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-                <select value={filterRange} onChange={(e) => onFilterRangeChange(e.target.value as DateFilterRange)} className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer uppercase">
-                  <option value="today">Hoje</option>
-                  <option value="weekly">Semana</option>
-                  <option value="monthly">Mensal</option>
-                  <option value="all">Tudo</option>
-                  <option value="custom">Personalizado</option>
-                </select>
-                {filterRange === 'custom' && (
-                  <input type="date" value={customDate} onChange={(e) => onCustomDateChange(e.target.value)} className="bg-transparent text-[10px] font-black text-indigo-600 outline-none border-l border-slate-300 pl-2" />
-                )}
               </div>
             </div>
           </div>

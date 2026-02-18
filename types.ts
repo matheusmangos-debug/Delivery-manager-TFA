@@ -90,8 +90,6 @@ export interface ReturnReason {
   isActive: boolean;
 }
 
-// Fixed missing types required by constants.tsx
-
 export interface Helper {
   id: string;
   name: string;
@@ -116,4 +114,17 @@ export interface ReturnOrder {
   status: ReturnStatus;
   reason: string;
   date: string;
+}
+
+// Fix: Added missing Checkout interface to support CheckoutForm component and fix import error
+export interface Checkout {
+  id?: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  totalValue: number;
+  paymentMethod: string;
+  status: string;
+  items?: string;
+  created_at?: string;
 }
