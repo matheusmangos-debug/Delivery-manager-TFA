@@ -78,11 +78,29 @@ const Settings: React.FC<SettingsProps> = ({
     setShowBulkModal(false);
   };
 
+  const handleAddBranch = () => {
+    if (!temp.bid || !temp.bname) return;
+    onAddBranch({ id: temp.bid, name: temp.bname, location: temp.bloc || 'Local não informado' });
+    setTemp({});
+  };
+
+  const handleAddVehicle = () => {
+    if (!temp.vplate || !temp.vbranch) return;
+    onAddVehicle({ id: crypto.randomUUID(), plate: temp.vplate.toUpperCase(), model: temp.vmodel || 'Padrão', capacity: 'N/A', branchId: temp.vbranch });
+    setTemp({});
+  };
+
+  const handleAddDriver = () => {
+    if (!temp.dname || !temp.dbranch) return;
+    onAddDriver({ id: crypto.randomUUID(), name: temp.dname.toUpperCase(), licenseType: 'D', status: 'Ativo', branchId: temp.dbranch, manualStatus: 'patio' });
+    setTemp({});
+  };
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       <div className="flex border-b border-slate-200 bg-white rounded-t-3xl px-4 overflow-x-auto no-scrollbar shadow-sm">
         {tabs.map((tab) => (
-          <button key={tab.id} onClick={() => setActiveSubTab(tab.id as any)} className={`px-6 py-5 text-[10px] font-black uppercase tracking-widest flex items-center gap-3 border-b-2 transition-all ${activeSubTab === tab.id ? 'border-indigo-600 text-indigo-600 bg-indigo-50/20 shadow-[inset_0_-2px_0_0_rgba(79,70,229,1)]' : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+          <button key={tab.id} onClick={() => setActiveSubTab(tab.id as any)} className={`px-6 py-5 text-[10px] font-black uppercase tracking-widest flex items-center gap-3 border-b-2 transition-all whitespace-nowrap ${activeSubTab === tab.id ? 'border-indigo-600 text-indigo-600 bg-indigo-50/20 shadow-[inset_0_-2px_0_0_rgba(79,70,229,1)]' : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
             <i className={`fas ${tab.icon}`}></i>{tab.label}
           </button>
         ))}
@@ -90,12 +108,104 @@ const Settings: React.FC<SettingsProps> = ({
 
       <div className="bg-white rounded-b-3xl border border-slate-100 shadow-sm p-8 min-h-[550px]">
         
-        {/* MAPEAMENTO DE VENDEDORES */}
+        {/* FILIAIS */}
+        {activeSubTab === 'branches' && (
+          <div className="space-y-8 max-w-5xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+               <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Configurar Unidades Operacionais</h3>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input placeholder="ID Único (ex: sp-01)" value={temp.bid || ''} onChange={e => setTemp({...temp, bid: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <input placeholder="Nome da Filial" value={temp.bname || ''} onChange={e => setTemp({...temp, bname: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <input placeholder="Cidade/Estado" value={temp.bloc || ''} onChange={e => setTemp({...temp, bloc: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <button onClick={handleAddBranch} className="md:col-span-3 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Ativar Unidade</button>
+               </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {branches.map(b => (
+                <div key={b.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 transition-all group">
+                  <div>
+                    <span className="font-black uppercase text-[9px] text-indigo-500 tracking-widest">{b.id}</span>
+                    <p className="text-xs font-black text-slate-700 uppercase">{b.name}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{b.location}</p>
+                  </div>
+                  <button onClick={() => onRemoveBranch(b.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* FROTA (VEÍCULOS) */}
+        {activeSubTab === 'vehicles' && (
+          <div className="space-y-8 max-w-5xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+               <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Controle de Veículos</h3>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input placeholder="Placa (ABC-1234)" value={temp.vplate || ''} onChange={e => setTemp({...temp, vplate: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white uppercase" />
+                  <input placeholder="Modelo/Marca" value={temp.vmodel || ''} onChange={e => setTemp({...temp, vmodel: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <select value={temp.vbranch || ''} onChange={e => setTemp({...temp, vbranch: e.target.value})} className="p-4 rounded-2xl border font-bold text-xs uppercase bg-white">
+                     <option value="">Vincular à Filial...</option>
+                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                  <button onClick={handleAddVehicle} className="md:col-span-3 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700">Salvar Veículo</button>
+               </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {vehicles.map(v => (
+                <div key={v.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 transition-all group">
+                  <div>
+                    <span className="font-black uppercase text-xs text-indigo-600 tracking-widest">{v.plate}</span>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">{v.model}</p>
+                    <p className="text-[8px] font-black text-slate-400 uppercase mt-1">
+                      <i className="fas fa-building mr-1"></i> {branches.find(b => b.id === v.branchId)?.name || 'N/A'}
+                    </p>
+                  </div>
+                  <button onClick={() => onRemoveVehicle(v.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MOTORISTAS (EQUIPES) */}
+        {activeSubTab === 'drivers' && (
+          <div className="space-y-8 max-w-5xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+               <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Gestão de Colaboradores</h3>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input placeholder="Nome Completo do Motorista" value={temp.dname || ''} onChange={e => setTemp({...temp, dname: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <select value={temp.dbranch || ''} onChange={e => setTemp({...temp, dbranch: e.target.value})} className="p-4 rounded-2xl border font-bold text-xs uppercase bg-white">
+                     <option value="">Filial de Lotação...</option>
+                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                  <button onClick={handleAddDriver} className="md:col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700">Adicionar à Equipe</button>
+               </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {drivers.map(d => (
+                <div key={d.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 transition-all group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-xs text-slate-400">{d.name.charAt(0)}</div>
+                    <div>
+                      <p className="text-xs font-black text-slate-700 uppercase">{d.name}</p>
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-tight">
+                        {branches.find(b => b.id === d.branchId)?.name || 'S/ Filial'}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => onRemoveDriver(d.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MAPEAMENTO DE VENDEDORES (FINALIZADO) */}
         {activeSubTab === 'mappings' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex justify-between items-center bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
               <div>
-                <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Central de Mapeamento Comercial</h3>
+                <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Mapeamento Comercial</h3>
                 <p className="text-xs font-bold text-indigo-900 uppercase">Vincule clientes a vendedores para automação de WhatsApp</p>
               </div>
               <button onClick={() => { setBulkText(''); setShowBulkModal(true); }} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:scale-105 transition-all">
@@ -118,19 +228,19 @@ const Settings: React.FC<SettingsProps> = ({
                     <p className="text-xs font-black text-slate-700 uppercase">{m.sellerName}</p>
                     <p className="text-[10px] text-emerald-600 font-bold">{m.sellerPhone || 'S/ WhatsApp'}</p>
                   </div>
-                  <button onClick={() => onRemoveMapping(m.customerId)} className="text-slate-200 group-hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                  <button onClick={() => onRemoveMapping(m.customerId)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* BASE CRÍTICA */}
+        {/* BASE CRÍTICA (FINALIZADO) */}
         {activeSubTab === 'critical-base' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex justify-between items-center bg-rose-50 p-6 rounded-[2rem] border border-rose-100">
               <div>
-                <h3 className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Gerenciamento de Alertas Operacionais</h3>
+                <h3 className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Alertas Operacionais</h3>
                 <p className="text-xs font-bold text-rose-900 uppercase">Clientes com restrições ou alto índice de devolução</p>
               </div>
               <button onClick={() => { setBulkText(''); setShowBulkModal(true); }} className="px-5 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:scale-105 transition-all">
@@ -174,28 +284,7 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
         )}
 
-        {/* OUTROS COMPONENTES MANTIDOS CONFORME SOLICITADO */}
-        {activeSubTab === 'reasons' && (
-          <div className="space-y-8 max-w-4xl">
-            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Motivos Operacionais</h3>
-              <div className="flex gap-4">
-                <input placeholder="Ex: Cliente fechado" value={temp.reasonLabel || ''} onChange={e => setTemp({...temp, reasonLabel: e.target.value})} className="flex-1 p-4 rounded-2xl border font-bold text-sm bg-white" />
-                <button onClick={() => { onAddReason({id: `REAS-${Date.now()}`, label: temp.reasonLabel, color: '#4f46e5', isActive: true}); setTemp({}); }} disabled={!temp.reasonLabel} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {reasons.map(r => (
-                <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 group">
-                  <span className="font-black uppercase text-xs text-slate-700 tracking-tight">{r.label}</span>
-                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* BANCO DE DADOS */}
+        {/* BANCO DE DADOS (MONITOR) */}
         {activeSubTab === 'database' && (
           <div className="space-y-8 max-w-5xl">
             <div className="flex items-center justify-between">
@@ -226,6 +315,27 @@ const Settings: React.FC<SettingsProps> = ({
                    <p>> realtime: enabled</p>
                    <p className="animate-pulse">> _</p>
                 </div>
+            </div>
+          </div>
+        )}
+
+        {/* MOTIVOS (MANTIDO) */}
+        {activeSubTab === 'reasons' && (
+          <div className="space-y-8 max-w-4xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Motivos Operacionais</h3>
+              <div className="flex gap-4">
+                <input placeholder="Ex: Cliente fechado" value={temp.reasonLabel || ''} onChange={e => setTemp({...temp, reasonLabel: e.target.value})} className="flex-1 p-4 rounded-2xl border font-bold text-sm bg-white" />
+                <button onClick={() => { onAddReason({id: `REAS-${Date.now()}`, label: temp.reasonLabel, color: '#4f46e5', isActive: true}); setTemp({}); }} disabled={!temp.reasonLabel} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {reasons.map(r => (
+                <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 group">
+                  <span className="font-black uppercase text-xs text-slate-700 tracking-tight">{r.label}</span>
+                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
             </div>
           </div>
         )}
