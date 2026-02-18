@@ -34,6 +34,7 @@ const TeamPerformance: React.FC<TeamPerformanceProps> = ({ selectedBranch, deliv
         plate: driverDeliveries[0]?.licensePlate || 'S/ Veículo'
       };
 
+      // Lógica de Status Automático (Caso não tenha manual)
       let calculatedStatus: 'base' | 'rota' | 'patio' = 'patio';
       if (stats.total > 0) {
         if (stats.pending === 0 && stats.inTransit === 0) calculatedStatus = 'base';
@@ -74,6 +75,7 @@ const TeamPerformance: React.FC<TeamPerformanceProps> = ({ selectedBranch, deliv
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      
       {/* Resumo Operacional */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
@@ -134,7 +136,7 @@ const TeamPerformance: React.FC<TeamPerformanceProps> = ({ selectedBranch, deliv
               <button onClick={() => handleBulkStatusChange('rota')} className="px-4 py-2 bg-amber-600 rounded-xl text-[10px] font-black uppercase hover:bg-amber-700 transition-all">Marcar Em Rota</button>
               <button onClick={() => handleBulkStatusChange('patio')} className="px-4 py-2 bg-slate-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-700 transition-all">Marcar No Pátio</button>
             </div>
-            <button onClick={() => setSelectedDriverIds([])} className="text-slate-400 hover:text-white p-2"><i className="fas fa-times"></i></button>
+            <button onClick={() => setSelectedDriverIds([])} className="text-slate-400 hover:text-white p-2 transition-colors"><i className="fas fa-times"></i></button>
           </div>
         </div>
       )}
