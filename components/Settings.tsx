@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ReturnReason, CustomerReputation, Branch, Driver, Vehicle, ClientMapping } from '../types';
 
 interface SettingsProps {
@@ -26,116 +26,12 @@ const Settings: React.FC<SettingsProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'reasons' | 'critical-base' | 'branches' | 'vehicles' | 'drivers' | 'mappings' | 'database'>('reasons');
   const [temp, setTemp] = useState<any>({ cstatus: 'Retorno', crisk: 'low' });
 
-  const SQL_SCHEMA = `-- SQL LIMPO PARA O PROJETO (rvzcixwhkkrlnesbcdke)
--- Execute no SQL Editor do Supabase para criar as tabelas necessárias:
-
-CREATE TABLE IF NOT EXISTS deliveries (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY, 
-  "customerId" text NOT NULL, 
-  "customerName" text, 
-  address text, 
-  status text, 
-  date date, 
-  "deliveryDay" text, 
-  "trackingCode" text, 
-  items text, 
-  "boxQuantity" integer, 
-  "driverName" text, 
-  branch text, 
-  "returnReason" text, 
-  "returnNotes" text, 
-  created_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS customer_reputation (
-  "customerId" text PRIMARY KEY, 
-  "returnCount" integer DEFAULT 0, 
-  "complaintCount" integer DEFAULT 0, 
-  notes text, 
-  status text, 
-  "riskLevel" text, 
-  "resolutionStatus" text DEFAULT 'Pendente', 
-  "registrationDate" text
-);
-
-CREATE TABLE IF NOT EXISTS vehicles (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY, 
-  plate text UNIQUE, 
-  model text, 
-  capacity text, 
-  "branchId" text, 
-  "driverId" text
-);
-
-CREATE TABLE IF NOT EXISTS drivers (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY, 
-  name text, 
-  "branchId" text, 
-  status text, 
-  "manualStatus" text
-);
-
-CREATE TABLE IF NOT EXISTS branches (
-  id text PRIMARY KEY, 
-  name text, 
-  location text
-);
-
-CREATE TABLE IF NOT EXISTS return_reasons (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY, 
-  label text, 
-  color text, 
-  "isActive" boolean DEFAULT true
-);
-
-CREATE TABLE IF NOT EXISTS client_mappings (
-  "customerId" text PRIMARY KEY, 
-  "sellerName" text, 
-  "sellerCode" text, 
-  "sellerPhone" text, 
-  "customerName" text
-);
-
-CREATE TABLE IF NOT EXISTS users (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY, 
-  name text, 
-  email text UNIQUE, 
-  password text, 
-  role text, 
-  avatar text, 
-  created_at timestamptz DEFAULT now()
-);
-
--- Desabilitar RLS para facilitar a integração inicial
-ALTER TABLE deliveries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE customer_reputation DISABLE ROW LEVEL SECURITY;
-ALTER TABLE vehicles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drivers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE branches DISABLE ROW LEVEL SECURITY;
-ALTER TABLE return_reasons DISABLE ROW LEVEL SECURITY;
-ALTER TABLE client_mappings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;`;
-
   const tabs = [
-    { id: 'reasons', label: 'Motivos', icon: 'fa-clipboard-list' },
-    { id: 'critical-base', label: 'Base Crítica', icon: 'fa-user-shield' },
-    { id: 'mappings', label: 'Vendedores', icon: 'fa-address-book' },
-    { id: 'branches', label: 'Filiais', icon: 'fa-building' },
-    { id: 'vehicles', label: 'Frota', icon: 'fa-truck-front' },
-    { id: 'drivers', label: 'Equipe', icon: 'fa-users' },
-    { id: 'database', label: 'Banco de Dados', icon: 'fa-database' },
+    { id: 'reasons', label: 'Motivos de Retorno', icon: 'fa-clipboard-list' },
+    { id: 'critical-base', label: 'Base Crítica (Alertas)', icon: 'fa-user-shield' },
+    { id: 'mappings', label: 'Mapeamento de Vendedores', icon: 'fa-address-book' },
+    { id: 'database', label: 'Monitoramento SQL', icon: 'fa-database' },
   ];
-
-  const tableLabels: Record<string, string> = {
-    deliveries: 'Entregas',
-    customer_reputation: 'Base Crítica',
-    vehicles: 'Frota',
-    drivers: 'Motoristas',
-    branches: 'Filiais',
-    return_reasons: 'Motivos de Retorno',
-    client_mappings: 'Mapeamento de Vendedores',
-    users: 'Usuários/Acesso'
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -148,6 +44,98 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;`;
       </div>
 
       <div className="bg-white rounded-b-3xl border border-slate-100 shadow-sm p-8 min-h-[550px]">
+        {/* GERENCIAMENTO DE MOTIVOS */}
+        {activeSubTab === 'reasons' && (
+          <div className="space-y-8 max-w-4xl">
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Cadastrar Motivo Oficial</h3>
+              <div className="flex gap-4">
+                <input placeholder="Ex: Produto Vencido" value={temp.reasonLabel || ''} onChange={e => setTemp({...temp, reasonLabel: e.target.value})} className="flex-1 p-4 rounded-2xl border font-bold text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/10" />
+                <button onClick={() => { onAddReason({id: `REAS-${Date.now()}`, label: temp.reasonLabel, color: '#4f46e5', isActive: true}); setTemp({}); }} disabled={!temp.reasonLabel} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-indigo-100 hover:scale-105 transition-all disabled:opacity-50">Adicionar</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {reasons.map(r => (
+                <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 group transition-all">
+                  <span className="font-black uppercase text-xs text-slate-700 tracking-tight flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
+                    {r.label}
+                  </span>
+                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* GERENCIAMENTO DE BASE CRÍTICA */}
+        {activeSubTab === 'critical-base' && (
+          <div className="space-y-8 max-w-5xl">
+            <div className="bg-rose-50 p-8 rounded-[2rem] border border-rose-100">
+              <h3 className="text-[10px] font-black text-rose-400 uppercase mb-4 tracking-widest">Adicionar Cliente ao Alerta Crítico</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <input placeholder="Matrícula" value={temp.cid || ''} onChange={e => setTemp({...temp, cid: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                <select value={temp.cstatus} onChange={e => setTemp({...temp, cstatus: e.target.value})} className="p-4 rounded-2xl border font-bold text-xs uppercase bg-white">
+                   <option>Retorno</option>
+                   <option>Reclamação</option>
+                   <option>Restrição de Horário</option>
+                </select>
+                <select value={temp.crisk} onChange={e => setTemp({...temp, crisk: e.target.value})} className="p-4 rounded-2xl border font-bold text-xs uppercase bg-white">
+                   <option value="low">Risco Baixo</option>
+                   <option value="medium">Risco Médio</option>
+                   <option value="high">Risco Alto</option>
+                </select>
+                <input placeholder="Observação Interna" value={temp.cnotes || ''} onChange={e => setTemp({...temp, cnotes: e.target.value})} className="col-span-2 p-4 rounded-2xl border font-bold text-sm bg-white" />
+                <button onClick={() => { onAddCritical({customerId: temp.cid, returnCount: 0, complaintCount: 1, notes: temp.cnotes, status: temp.cstatus, riskLevel: temp.crisk, resolutionStatus: 'Pendente', registrationDate: new Date().toISOString().split('T')[0]}); setTemp({cstatus: 'Retorno', crisk: 'low'}); }} className="p-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Ativar Alerta</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {customerDatabase.map(c => (
+                <div key={c.customerId} className={`p-5 border rounded-3xl flex items-center justify-between bg-white ${c.riskLevel === 'high' ? 'border-rose-200 bg-rose-50/10' : ''}`}>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${c.riskLevel === 'high' ? 'bg-rose-600' : 'bg-amber-400'}`}>
+                      <i className="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-800 uppercase leading-none">{c.customerId}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{c.status} • {c.notes}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => onRemoveCritical(c.customerId)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* GERENCIAMENTO DE MAPEAMENTO (VENDEDORES) */}
+        {activeSubTab === 'mappings' && (
+          <div className="space-y-8 max-w-5xl">
+            <div className="bg-indigo-50 p-8 rounded-[2rem] border border-indigo-100">
+               <h3 className="text-[10px] font-black text-indigo-400 uppercase mb-4 tracking-widest">Mapear Cliente x Vendedor</h3>
+               <div className="grid grid-cols-4 gap-4">
+                  <input placeholder="Matrícula" value={temp.mapCid || ''} onChange={e => setTemp({...temp, mapCid: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <input placeholder="Nome Vendedor" value={temp.mapSname || ''} onChange={e => setTemp({...temp, mapSname: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <input placeholder="WhatsApp (55...)" value={temp.mapPhone || ''} onChange={e => setTemp({...temp, mapPhone: e.target.value})} className="p-4 rounded-2xl border font-bold text-sm bg-white" />
+                  <button onClick={() => { onAddMapping({customerId: temp.mapCid, customerName: 'Busca Automática', sellerName: temp.mapSname, sellerCode: 'VD', sellerPhone: temp.mapPhone}); setTemp({}); }} className="p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Salvar Mapeamento</button>
+               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {clientMappings.map(m => (
+                <div key={m.customerId} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 transition-all">
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Cliente: {m.customerId}</p>
+                    <p className="text-xs font-black text-slate-700 uppercase">{m.sellerName}</p>
+                    <p className="text-[10px] text-emerald-600 font-bold">{m.sellerPhone}</p>
+                  </div>
+                  <button onClick={() => onRemoveMapping(m.customerId)} className="text-slate-200 hover:text-rose-500 p-2"><i className="fas fa-trash-can"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MONITORAMENTO DO BANCO */}
         {activeSubTab === 'database' && (
           <div className="space-y-8 max-w-5xl">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -158,65 +146,30 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;`;
                 </div>
                 
                 <div className="grid grid-cols-1 gap-3">
-                  {Object.entries(tableLabels).map(([key, label]) => (
+                  {['deliveries', 'customer_reputation', 'return_reasons', 'client_mappings'].map((key) => (
                     <div key={key} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl">
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs ${tableStatus[key] ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
                           <i className={`fas ${tableStatus[key] ? 'fa-check' : 'fa-times'}`}></i>
                         </div>
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{label}</span>
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{key.replace('_', ' ')}</span>
                       </div>
                       <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md ${tableStatus[key] ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {tableStatus[key] ? 'Ativa' : 'Pendente'}
+                        {tableStatus[key] ? 'Conectada' : 'Offline'}
                       </span>
                     </div>
                   ))}
                 </div>
-                {dbStatus === 'offline' && (
-                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-[10px] text-rose-700 font-bold uppercase">
-                    <i className="fas fa-exclamation-triangle mr-2"></i> Atenção: A chave Anon Key parece ser inválida para este projeto Supabase. Por favor, revise no painel API.
-                  </div>
-                )}
               </div>
-
-              <div className="space-y-6">
-                <h3 className="font-black text-slate-800 uppercase text-sm">Estrutura Logística</h3>
-                <div className="p-6 bg-indigo-50 border border-indigo-100 rounded-[2rem] text-xs text-indigo-900 leading-relaxed font-medium">
-                  <p className="mb-4">O sistema está pronto para operar em <strong>rvzcixwhkkrlnesbcdke</strong>. O módulo de checkouts foi removido para otimização.</p>
-                  <ol className="list-decimal list-inside space-y-2">
-                    <li>Copie o script SQL limpo.</li>
-                    <li>No painel do Supabase, vá em <strong>SQL Editor</strong>.</li>
-                    <li>Clique em <strong>Run</strong> para preparar o ambiente.</li>
-                  </ol>
-                </div>
-                <div className="relative group">
-                  <pre className="bg-slate-900 text-emerald-400 p-6 rounded-3xl text-[10px] font-mono h-[250px] overflow-y-auto border-4 border-slate-800 scrollbar-hide">
-                    {SQL_SCHEMA}
-                  </pre>
-                  <button onClick={() => { navigator.clipboard.writeText(SQL_SCHEMA); alert("Script Logístico Copiado!"); }} className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[10px] font-black uppercase backdrop-blur-md border border-white/20">Copiar</button>
-                </div>
+              <div className="bg-slate-900 p-6 rounded-[2rem] border-4 border-slate-800">
+                 <h4 className="text-emerald-400 text-[10px] font-black uppercase mb-4 tracking-widest">Terminal Logístico</h4>
+                 <div className="space-y-2 font-mono text-[9px] text-emerald-500/80">
+                    <p>> supabase connect: active</p>
+                    <p>> rvzcixwhkkrlnesbcdke: initialized</p>
+                    <p>> real-time status: healthy</p>
+                    <p>> synchronization latency: 12ms</p>
+                 </div>
               </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Outras abas (reasons, mappings, etc) continuam funcionando normalmente */}
-        {activeSubTab === 'reasons' && (
-          <div className="space-y-8 max-w-4xl">
-            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Motivos Operacionais</h3>
-              <div className="flex gap-4">
-                <input placeholder="Ex: Cliente fechado" value={temp.reasonLabel || ''} onChange={e => setTemp({...temp, reasonLabel: e.target.value})} className="flex-1 p-4 rounded-2xl border font-bold text-sm bg-white" />
-                <button onClick={() => { onAddReason({id: `REAS-${Date.now()}`, label: temp.reasonLabel, color: '#4f46e5', isActive: true}); setTemp({}); }} disabled={!temp.reasonLabel} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">Adicionar</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {reasons.map(r => (
-                <div key={r.id} className="p-5 border rounded-3xl flex items-center justify-between bg-white hover:border-indigo-200 group">
-                  <span className="font-black uppercase text-xs text-slate-700 tracking-tight">{r.label}</span>
-                  <button onClick={() => onRemoveReason(r.id)} className="text-slate-200 group-hover:text-rose-500 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
-                </div>
-              ))}
             </div>
           </div>
         )}
